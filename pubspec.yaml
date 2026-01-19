@@ -35,8 +35,17 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   
-  # Banco de dados local
+  # Banco de dados local (Isar para alta performance)
+  isar: ^3.1.0+1
+  isar_flutter_libs: ^3.1.0+1
   sqflite: ^2.3.0
+  sqflite_common_ffi: ^2.3.1
+  
+  # Firebase Cloud Messaging para sync
+  firebase_messaging: ^15.0.1
+  
+  # HTTP client para API
+  http: ^1.2.0
   
   # Seleção de imagens
   image_picker: ^1.0.7
@@ -71,8 +80,13 @@ dependencies:
   
   # Abrir arquivos
   open_file: ^3.5.4
+dev_dependencies:
   flutter_test:
     sdk: flutter
+  
+  # Gerador de código Isar
+  isar_generator: ^3.1.0+1
+  build_runner: ^2.4.8
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is

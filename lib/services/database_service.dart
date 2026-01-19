@@ -1,5 +1,8 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../models/user.dart';
 import '../models/wine.dart';
 import '../models/sale.dart';
@@ -7,6 +10,20 @@ import '../models/sale.dart';
 class DatabaseService {
   static Database? _database;
   static const String _dbName = 'app_vinho_taverna.db';
+
+  /// Inicializa sqflite FFI para Windows/Linux
+  static Future<void> initializeFFI() async {
+    if (Platform.isWindows || Platform.isLinux) {
+      try {
+        sqfliteFfiInit();
+        databaseFactory = databaseFactoryFfi;
+        debugPrint('✓ SQLite FFI inicializado com sucesso');
+      } catch (e) {
+        debugPrint('⚠️ Erro ao inicializar FFI: $e');
+        rethrow;
+      }
+    }
+  }
 
   Future<Database> get database async {
     if (_database != null) return _database!;

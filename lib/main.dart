@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'dart:io' show exit;
+import 'dart:io' show exit, Platform;
 import 'services/database_service.dart';
 import 'services/wine_service.dart';
 import 'services/user_service.dart';
@@ -11,6 +11,16 @@ import 'screens/home_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Inicializar sqflite no Windows
+  if (Platform.isWindows || Platform.isLinux) {
+    try {
+      await DatabaseService.initializeFFI();
+      debugPrint('✓ SQLite FFI inicializado para Windows/Linux');
+    } catch (e) {
+      debugPrint('⚠️ Erro ao inicializar SQLite FFI: $e');
+    }
+  }
 
   // Inicializar Firebase (opcional)
   bool firebaseInitialized = false;
