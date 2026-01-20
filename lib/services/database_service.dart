@@ -2,6 +2,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart';
 import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart';
 import '../models/user.dart';
 import '../models/wine.dart';
 import '../models/sale.dart';
@@ -13,8 +14,14 @@ class DatabaseService {
   // Inicializar FFI para Windows/Linux
   static Future<void> initializeFFI() async {
     if (Platform.isWindows || Platform.isLinux) {
-      sqfliteFfiInit();
-      databaseFactory = databaseFactoryFfi;
+      try {
+        sqfliteFfiInit();
+        databaseFactory = databaseFactoryFfi;
+        debugPrint('✓ SQLite FFI inicializado com sucesso');
+      } catch (e) {
+        debugPrint('⚠️ Erro ao inicializar FFI: $e');
+        rethrow;
+      }
     }
   }
 
@@ -270,6 +277,9 @@ class DatabaseService {
     final data = wine.toMap();
     data['user_id'] = userId;
     data['created_at'] = DateTime.now().toIso8601String();
+    data['synced'] = 0; // Marcar como não sincronizado
+    data['last_modified'] = DateTime.now().toIso8601String();
+    print('📝 Inserindo vinho: ${wine.name} (synced=0)');
     return await db.insert('wines', data);
   }
 
@@ -277,6 +287,9 @@ class DatabaseService {
     final db = await database;
     final data = wine.toMap();
     data['user_id'] = userId;
+    data['synced'] = 0; // Marcar como não sincronizado
+    data['last_modified'] = DateTime.now().toIso8601String();
+    print('📝 Atualizando vinho: ${wine.name} (synced=0)');
     return await db.update(
       'wines',
       data,
