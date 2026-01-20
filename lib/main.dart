@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'dart:io' show exit;
+import 'firebase_options.dart';
+import 'dart:io' show exit, Platform;
 import 'services/database_service.dart';
 import 'services/wine_service.dart';
 import 'services/user_service.dart';
@@ -12,15 +13,33 @@ import 'screens/home_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Inicializar Firebase (opcional)
+  // Inicializar sqflite no Windows
+  if (Platform.isWindows || Platform.isLinux) {
+    try {
+      await DatabaseService.initializeFFI();
+      debugPrint('✓ SQLite FFI inicializado para Windows/Linux');
+    } catch (e) {
+      debugPrint('⚠️ Erro ao inicializar SQLite FFI: $e');
+    }
+  }
+
+  // Inicializar Firebase com configurações corretas
   bool firebaseInitialized = false;
   try {
-    await Firebase.initializeApp();
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
     firebaseInitialized = true;
     debugPrint('✓ Firebase inicializado com sucesso!');
   } catch (e) {
-    debugPrint('⚠️ Firebase não configurado (modo offline): $e');
-    // Continuar sem Firebase - app funcionará offline
+    if (e.toString().contains('duplicate-app')) {
+      // Firebase já inicializado
+      firebaseInitialized = true;
+      debugPrint('✓ Firebase já estava inicializado');
+    } else {
+      debugPrint('⚠️ Firebase não configurado (modo offline): $e');
+      // Continuar sem Firebase - app funcionará offline
+    }
   }
 
   // Inicializar serviços
@@ -29,11 +48,13 @@ void main() async {
     await dbService.database; // Garantir que o DB está inicializado
     debugPrint('✓ Database inicializado');
     
-    // Passar o status do Firebase para os serviços
-    final wineService = WineService(dbService, firebaseEnabled: firebaseInitialized);
+    // Criar SyncService primeiro
+    final syncService = SyncService(dbService, firebaseEnabled: firebaseInitialized);
+    
+    // Passar o status do Firebase E o SyncService para os serviços
+    final wineService = WineService(dbService, firebaseEnabled: firebaseInitialized, syncService: syncService);
     final userService = UserService(dbService, firebaseEnabled: firebaseInitialized);
     final authService = AuthService(dbService, firebaseEnabled: firebaseInitialized);
-    final syncService = SyncService(dbService, firebaseEnabled: firebaseInitialized);
     
     debugPrint('✓ Serviços inicializados (Firebase: $firebaseInitialized)');
     

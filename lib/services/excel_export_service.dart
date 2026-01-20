@@ -451,8 +451,9 @@ class ExcelExportService {
       row++;
       sheet.cell(CellIndex.indexByString('A$row')).value = TextCellValue('TOTAL');
       sheet.cell(CellIndex.indexByString('F$row')).value = IntCellValue(totalSoldQuantity);
+      sheet.cell(CellIndex.indexByString('G$row')).value = DoubleCellValue(totalSoldValue);
       
-      for (var col in ['A', 'F']) {
+      for (var col in ['A', 'F', 'G']) {
         var cell = sheet.cell(CellIndex.indexByString('$col$row'));
         cell.cellStyle = CellStyle(
           bold: true,

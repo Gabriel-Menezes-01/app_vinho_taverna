@@ -34,6 +34,7 @@ class _AddEditWineScreenState extends State<AddEditWineScreen> {
   String _selectedWineType = 'tinto';
   String _selectedRegion = 'Outra região';
   final ImagePicker _picker = ImagePicker();
+  bool _saving = false;
 
   @override
   void initState() {
@@ -116,6 +117,8 @@ class _AddEditWineScreenState extends State<AddEditWineScreen> {
       return;
     }
 
+    setState(() => _saving = true);
+
     final wine = Wine(
       id: widget.wine?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
       name: _nameController.text.trim(),
@@ -132,6 +135,7 @@ class _AddEditWineScreenState extends State<AddEditWineScreen> {
       if (widget.wine != null) {
         await widget.wineService.updateWine(wine);
         if (mounted) {
+          setState(() => _saving = false);
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Vinho atualizado com sucesso!'),
@@ -143,6 +147,7 @@ class _AddEditWineScreenState extends State<AddEditWineScreen> {
       } else {
         await widget.wineService.addWine(wine);
         if (mounted) {
+          setState(() => _saving = false);
           // Manter a tela aberta após adicionar e limpar o formulário
           _nameController.clear();
           _priceController.clear();
@@ -165,6 +170,7 @@ class _AddEditWineScreenState extends State<AddEditWineScreen> {
       }
     } catch (e) {
       if (mounted) {
+        setState(() => _saving = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Erro ao salvar vinho: $e'),
@@ -428,20 +434,42 @@ class _AddEditWineScreenState extends State<AddEditWineScreen> {
 
             // Botão salvar
             ElevatedButton(
-              onPressed: _saveWine,
+              onPressed: _saving ? null : _saveWine,
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              child: Text(
-                widget.wine != null ? 'Atualizar' : 'Adicionar',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              child: _saving
+                  ? const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        ),
+                        SizedBox(width: 12),
+                        Text(
+                          'Salvando...',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    )
+                  : Text(
+                      widget.wine != null ? 'Atualizar' : 'Adicionar',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
             ),
             const SizedBox(height: 16),
 

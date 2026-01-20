@@ -1,12 +1,14 @@
 import '../models/wine.dart';
 import 'database_service.dart';
+import 'sync_service.dart';
 
 class WineService {
   final DatabaseService _dbService;
   final bool firebaseEnabled;
+  final SyncService syncService;
   int? _currentUserId;
 
-  WineService(this._dbService, {this.firebaseEnabled = false});
+  WineService(this._dbService, {this.firebaseEnabled = false, required this.syncService});
 
   // Definir usuário atual
   void setCurrentUserId(int userId) {

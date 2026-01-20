@@ -1,5 +1,7 @@
 import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart';
+import 'dart:io' show Platform;
 import '../models/user.dart';
 import '../models/wine.dart';
 import '../models/sale.dart';
@@ -7,6 +9,14 @@ import '../models/sale.dart';
 class DatabaseService {
   static Database? _database;
   static const String _dbName = 'app_vinho_taverna.db';
+
+  // Inicializar FFI para Windows/Linux
+  static Future<void> initializeFFI() async {
+    if (Platform.isWindows || Platform.isLinux) {
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+    }
+  }
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -20,7 +30,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 5, // Incrementado para adicionar coluna location
+      version: 7, // Incrementado para adicionar coluna email
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -101,6 +111,26 @@ class DatabaseService {
       // Adicionar coluna location à tabela wines
       await db.execute('ALTER TABLE wines ADD COLUMN location TEXT');
     }
+    
+    if (oldVersion < 6) {
+      // Adicionar coluna firebase_uid à tabela users
+      try {
+        await db.execute('ALTER TABLE users ADD COLUMN firebase_uid TEXT');
+        print('✓ Coluna firebase_uid adicionada à tabela users');
+      } catch (e) {
+        print('⚠️ Erro ao adicionar coluna firebase_uid: $e');
+      }
+    }
+    
+    if (oldVersion < 7) {
+      // Adicionar coluna email à tabela users
+      try {
+        await db.execute('ALTER TABLE users ADD COLUMN email TEXT');
+        print('✓ Coluna email adicionada à tabela users');
+      } catch (e) {
+        print('⚠️ Erro ao adicionar coluna email: $e');
+      }
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -109,8 +139,10 @@ class DatabaseService {
       CREATE TABLE users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE NOT NULL,
+        email TEXT NOT NULL,
         password TEXT NOT NULL,
-        created_at TEXT NOT NULL
+        created_at TEXT NOT NULL,
+        firebase_uid TEXT
       )
     ''');
 
@@ -157,13 +189,20 @@ class DatabaseService {
 
   // ========== USUÁRIOS ==========
 
-  Future<int> createUser(String username, String password) async {
+  Future<int> createUser(String username, String email, String password, {String? firebaseUid}) async {
     final db = await database;
-    return await db.insert('users', {
+    print('📝 Criando usuário no banco: $username ($email)');
+    
+    final userId = await db.insert('users', {
       'username': username,
+      'email': email,
       'password': password,
       'created_at': DateTime.now().toIso8601String(),
+      'firebase_uid': firebaseUid,
     });
+    
+    print('✅ Usuário criado no banco local com ID: $userId');
+    return userId;
   }
 
   Future<User?> getUserByUsername(String username) async {
@@ -172,6 +211,19 @@ class DatabaseService {
       'users',
       where: 'username = ?',
       whereArgs: [username],
+    );
+
+    if (maps.isEmpty) return null;
+
+    return User.fromMap(maps.first);
+  }
+
+  Future<User?> getUserByEmail(String email) async {
+    final db = await database;
+    final maps = await db.query(
+      'users',
+      where: 'email = ?',
+      whereArgs: [email],
     );
 
     if (maps.isEmpty) return null;
@@ -190,6 +242,25 @@ class DatabaseService {
     if (maps.isEmpty) return null;
 
     return User.fromMap(maps.first);
+  }
+
+  Future<void> updateUser(int id, {String? username, String? email, String? password, String? firebaseUid}) async {
+    final db = await database;
+    final data = <String, Object?>{};
+
+    if (username != null) data['username'] = username;
+    if (email != null) data['email'] = email;
+    if (password != null) data['password'] = password;
+    if (firebaseUid != null) data['firebase_uid'] = firebaseUid;
+
+    if (data.isEmpty) return;
+
+    await db.update(
+      'users',
+      data,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 
   // ========== VINHOS ==========

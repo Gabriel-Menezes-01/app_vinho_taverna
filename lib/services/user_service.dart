@@ -10,15 +10,15 @@ class UserService {
   UserService(DatabaseService dbService, {this.firebaseEnabled = false})
       : _authService = AuthService(dbService, firebaseEnabled: firebaseEnabled);
 
-  // Login
-  Future<bool> login(String username, String password) async {
-    final user = await _authService.login(username, password);
+  // Login com email
+  Future<bool> login(String email, String password) async {
+    final user = await _authService.login(email, password);
     return user != null;
   }
 
   // Registro
-  Future<bool> register(String username, String password) async {
-    return await _authService.register(username, password);
+  Future<bool> register(String username, String email, String password) async {
+    return await _authService.register(username, email, password);
   }
 
   // Obter usuário atual

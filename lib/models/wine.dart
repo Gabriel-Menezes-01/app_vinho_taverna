@@ -10,6 +10,7 @@ class Wine {
   String? location; // Local onde o vinho está armazenado
   bool synced; // Status de sincronização com servidor
   DateTime? lastModified; // Última modificação
+  DateTime? createdAt; // Data de criação
 
   Wine({
     required this.id,
@@ -23,6 +24,7 @@ class Wine {
     this.location,
     this.synced = false,
     this.lastModified,
+    this.createdAt,
   });
 
   Map<String, dynamic> toMap() {
@@ -38,6 +40,7 @@ class Wine {
       'location': location,
       'synced': synced ? 1 : 0,
       'last_modified': lastModified?.toIso8601String() ?? DateTime.now().toIso8601String(),
+      'created_at': createdAt?.toIso8601String() ?? DateTime.now().toIso8601String(),
     };
   }
 
@@ -56,6 +59,9 @@ class Wine {
       lastModified: map['last_modified'] != null
           ? DateTime.parse(map['last_modified'] as String)
           : null,
+      createdAt: map['created_at'] != null
+          ? DateTime.parse(map['created_at'] as String)
+          : null,
     );
   }
 
@@ -71,6 +77,7 @@ class Wine {
       'wineType': wineType,
         'quantity': quantity,
       'lastModified': lastModified?.toIso8601String() ?? DateTime.now().toIso8601String(),
+      'createdAt': createdAt?.toIso8601String() ?? DateTime.now().toIso8601String(),
     };
   }
 
@@ -87,6 +94,9 @@ class Wine {
       synced: true,
       lastModified: data['lastModified'] != null
           ? DateTime.parse(data['lastModified'] as String)
+          : null,
+      createdAt: data['createdAt'] != null
+          ? DateTime.parse(data['createdAt'] as String)
           : null,
     );
   }
@@ -111,5 +121,8 @@ class Wine {
     wineType: json['wineType'] ?? 'tinto',
     region: json['region'] ?? 'Outra região',
     quantity: (json['quantity'] as int?) ?? 0,
+    createdAt: json['createdAt'] != null
+        ? DateTime.parse(json['createdAt'] as String)
+        : null,
   );
 }

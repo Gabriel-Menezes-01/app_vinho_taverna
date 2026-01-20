@@ -38,7 +38,8 @@ class SyncService {
     }
 
     if (_currentUserId == null) {
-      throw Exception('Usuário não configurado');
+      print('⚠️ Usuário não configurado para sincronização');
+      return; // Não lançar exceção, apenas retornar
     }
 
     final hasInternet = await hasInternetConnection();
@@ -48,16 +49,19 @@ class SyncService {
     }
 
     try {
+      print('🔄 Iniciando sincronização para usuário $_currentUserId');
       // 1. Enviar vinhos locais não sincronizados para o servidor
       await uploadUnsyncedWines();
 
       // 2. Baixar vinhos do servidor que não existem localmente
       await downloadWinesFromServer();
 
-      print('Sincronização concluída com sucesso!');
-    } catch (e) {
-      print('Erro na sincronização: $e');
-      rethrow;
+      print('✅ Sincronização concluída com sucesso!');
+    } catch (e, stackTrace) {
+      print('⚠️ Erro na sincronização: $e');
+      print('Stack: $stackTrace');
+      // NÃO lançar exceção aqui - apenas log
+      // O app deve funcionar mesmo sem Firebase
     }
   }
 
@@ -77,21 +81,80 @@ class SyncService {
 
     for (final wine in unsyncedWines) {
       try {
-        // Salvar no Firestore na coleção do usuário
+        // Salvar no Firestore na coleção do usuário com timeout
         await _firestore!
             .collection('users')
             .doc(_currentUserId.toString())
             .collection('wines')
             .doc(wine.id)
-            .set(wine.toFirestore());
+            .set(wine.toFirestore())
+            .timeout(const Duration(seconds: 10), onTimeout: () {
+              throw Exception('Timeout ao sincronizar vinho ${wine.name}');
+            });
 
         // Marcar como sincronizado localmente
         await _dbService.markWineAsSynced(wine.id, _currentUserId!);
 
-        print('Vinho ${wine.name} sincronizado com sucesso!');
+        print('✅ Vinho ${wine.name} sincronizado com sucesso!');
       } catch (e) {
-        print('Erro ao sincronizar vinho ${wine.name}: $e');
+        print('⚠️ Erro ao sincronizar vinho ${wine.name}: $e');
+        // Continuar sincronizando os outros vinhos
       }
+    }
+  }
+
+  // Download de vinhos do servidor usando firebaseUid (para sincronização entre dispositivos)
+  Future<void> downloadWinesFromFirebase(String firebaseUid, int localUserId) async {
+    if (!firebaseEnabled || _firestore == null) {
+      print('Firebase não habilitado para sincronização');
+      return;
+    }
+
+    print('🔄 Sincronizando vinhos do Firebase para usuário $firebaseUid...');
+
+    try {
+      // Buscar vinhos do servidor usando firebaseUid
+      final snapshot = await _firestore!
+          .collection('users')
+          .doc(firebaseUid)
+          .collection('wines')
+          .get()
+          .timeout(const Duration(seconds: 15));
+
+      // Obter IDs dos vinhos locais
+      final localWines = await _dbService.getWinesByUser(localUserId);
+      final localWineIds = localWines.map((w) => w.id).toSet();
+
+      int newWinesCount = 0;
+      int updatedWinesCount = 0;
+
+      for (final doc in snapshot.docs) {
+        final serverWine = Wine.fromFirestore(doc.data());
+
+        // Se o vinho não existe localmente, adicionar
+        if (!localWineIds.contains(serverWine.id)) {
+          await _dbService.insertWine(serverWine, localUserId);
+          await _dbService.markWineAsSynced(serverWine.id, localUserId);
+          newWinesCount++;
+          print('✅ Vinho ${serverWine.name} baixado do servidor!');
+        } else {
+          // Verificar se o vinho do servidor é mais recente
+          final localWine = localWines.firstWhere((w) => w.id == serverWine.id);
+          if (serverWine.lastModified != null &&
+              localWine.lastModified != null &&
+              serverWine.lastModified!.isAfter(localWine.lastModified!)) {
+            // Atualizar com dados mais recentes do servidor
+            await _dbService.updateWine(serverWine, localUserId);
+            await _dbService.markWineAsSynced(serverWine.id, localUserId);
+            updatedWinesCount++;
+            print('✅ Vinho ${serverWine.name} atualizado com dados do servidor!');
+          }
+        }
+      }
+
+      print('🎉 Sincronização completa: $newWinesCount novos, $updatedWinesCount atualizados');
+    } catch (e) {
+      print('⚠️ Erro ao sincronizar vinhos do Firebase: $e');
     }
   }
 

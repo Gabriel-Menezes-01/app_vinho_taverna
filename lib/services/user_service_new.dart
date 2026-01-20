@@ -16,8 +16,8 @@ class UserService {
   }
 
   // Registro
-  Future<bool> register(String username, String password) async {
-    return await _authService.register(username, password);
+  Future<bool> register(String username, String email, String password) async {
+    return await _authService.register(username, email, password);
   }
 
   // Obter usuário atual

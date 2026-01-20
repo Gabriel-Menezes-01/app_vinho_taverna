@@ -37,6 +37,7 @@ dependencies:
   
   # Banco de dados local
   sqflite: ^2.3.0
+  sqflite_common_ffi: ^2.3.1  # Suporte para Windows/Linux
   
   # Seleção de imagens
   image_picker: ^1.0.7
@@ -56,6 +57,8 @@ dependencies:
   # Firebase para sincronização em nuvem
   firebase_core: ^3.8.1
   cloud_firestore: ^5.6.1
+  firebase_auth: ^5.3.5  # Autenticação cross-device
+  firebase_database: ^11.3.3  # Realtime Database
   
   # Verificação de conectividade
   connectivity_plus: ^6.1.2

@@ -37,7 +37,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Wine> _wines = [];
   bool _loading = true;
   String? _username;
-  bool _isAuthenticatedForAddingWine = false;
+  String? _email;
 
   @override
   void initState() {
@@ -48,32 +48,51 @@ class _HomeScreenState extends State<HomeScreen> {
 
 
   Future<void> _loadData() async {
+    print('📱 HomeScreen._loadData iniciando...');
     setState(() => _loading = true);
     
-    // Carregar usuário atual e configurar no WineService
-    final user = await widget.userService?.getUserAsync();
-    
-    if (user != null && user.id != null) {
-      widget.wineService.setCurrentUserId(user.id!);
-      widget.syncService.setCurrentUserId(user.id!);
+    try {
+      // Carregar usuário atual e configurar no WineService
+      final user = await widget.userService?.getUserAsync();
+      print('👤 Usuário carregado: ${user?.username ?? "NENHUM"}');
       
-      // Tentar sincronizar com servidor
-      try {
-        await widget.syncService.syncAll();
-      } catch (e) {
-        print('Erro na sincronização: $e');
-        // Continua mesmo se falhar - dados locais ainda funcionam
+      if (user != null && user.id != null) {
+        print('⚙️ Configurando usuário ${user.id} no WineService e SyncService');
+        widget.wineService.setCurrentUserId(user.id!);
+        widget.syncService.setCurrentUserId(user.id!);
+        
+        // Tentar sincronizar com servidor
+        try {
+          print('🔄 Iniciando sincronização...');
+          await widget.syncService.syncAll();
+          print('✅ Sincronização concluída');
+        } catch (e) {
+          print('⚠️ Erro na sincronização: $e');
+          // Continua mesmo se falhar - dados locais ainda funcionam
+        }
+      } else {
+        print('ℹ️ Nenhum usuário logado, pulando sincronização');
       }
-    }
-    
-    final wines = await widget.wineService.getAllWines();
-    
-    if (mounted) {
-      setState(() {
-        _username = user?.username;
-        _wines = wines;
-        _loading = false;
-      });
+      
+      final wines = await widget.wineService.getAllWines();
+      print('🍷 Carregados ${wines.length} vinhos');
+      
+      if (mounted) {
+        setState(() {
+          _username = user?.username;
+          _email = user?.email;
+          _wines = wines;
+          _loading = false;
+        });
+      }
+    } catch (e, stackTrace) {
+      print('❌ Erro em _loadData: $e');
+      print('Stack: $stackTrace');
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -411,11 +430,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    // Marcar como autenticado para adicionar vinhos
-    setState(() {
-      _isAuthenticatedForAddingWine = true;
-    });
-
+    // Navegar para tela de adicionar vinhos
     if (mounted) {
       await Navigator.push(
         context,
@@ -426,15 +441,24 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       );
-      // Limpar autenticação ao sair da tela de adicionar vinhos
-      setState(() {
-        _isAuthenticatedForAddingWine = false;
-      });
       _loadData(); // Recarregar após adicionar
     }
   }
 
   Future<bool> _showPasswordDialog() async {
+    // Garantir que temos um email válido para autenticar
+    final currentUser = await widget.userService?.getUserAsync();
+    final email = currentUser?.email ?? _email;
+
+    if (email == null || email.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Sessão expirada. Faça login novamente.')),
+        );
+      }
+      return false;
+    }
+
     final passwordController = TextEditingController();
     String? errorMessage;
 
@@ -487,8 +511,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   return;
                 }
 
-                // Verificar senha com o username atual
-                final success = await widget.userService?.login(_username ?? '', password) ?? false;
+                // Verificar senha usando o email do usuário logado
+                final success = await widget.userService?.login(email, password) ?? false;
                 
                 if (!context.mounted) return;
 

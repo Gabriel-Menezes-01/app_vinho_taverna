@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import '../models/sale.dart';
-import '../models/wine.dart';
 import '../services/database_service.dart';
 import '../services/user_service.dart';
 import '../services/excel_export_service.dart';
@@ -25,7 +24,6 @@ class SalesScreen extends StatefulWidget {
 class _SalesScreenState extends State<SalesScreen> {
   List<Sale> _sales = [];
   Map<String, List<Sale>> _salesByDay = {};
-  Map<String, List<Sale>> _salesByWine = {};
   bool _isLoading = true;
   bool _isExporting = false;
   DateTime _selectedMonth = DateTime.now();
@@ -58,20 +56,10 @@ class _SalesScreenState extends State<SalesScreen> {
           }
           groupedSales[dateKey]!.add(sale);
         }
-
-        // Agrupar vendas por vinho
-        final Map<String, List<Sale>> groupedByWine = {};
-        for (var sale in sales) {
-          if (!groupedByWine.containsKey(sale.wineName)) {
-            groupedByWine[sale.wineName] = [];
-          }
-          groupedByWine[sale.wineName]!.add(sale);
-        }
         
         setState(() {
           _sales = sales;
           _salesByDay = groupedSales;
-          _salesByWine = groupedByWine;
           _isLoading = false;
         });
       }
@@ -113,16 +101,6 @@ class _SalesScreenState extends State<SalesScreen> {
     return _sales.fold(0, (sum, sale) => sum + sale.quantity);
   }
 
-  List<String> _getSoldOutWines() {
-    final soldOut = <String>[];
-    _salesByWine.forEach((wineName, sales) {
-      final totalQty = sales.fold<int>(0, (sum, sale) => sum + sale.quantity);
-      if (totalQty > 0) {
-        soldOut.add(wineName);
-      }
-    });
-    return soldOut;
-  }
 
   Future<void> _exportToExcel() async {
     // Mostrar diálogo de opções

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "886089057823",
+    "project_id": "carta-vinhos-fd287",
+    "storage_bucket": "carta-vinhos-fd287.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:886089057823:android:a570aa684e5a4bfb68372a",
+        "android_client_info": {
+          "package_name": "com.banco.cartavinhos"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBPrrNLffXoXq1FdbDYrQ0VJBuhvfujblU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

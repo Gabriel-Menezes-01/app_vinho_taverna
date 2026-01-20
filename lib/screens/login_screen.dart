@@ -25,15 +25,18 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _userController = TextEditingController();
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
   final _passController = TextEditingController();
   bool _loading = false;
   String? _error;
   bool _isRegisterMode = false;
+  bool _obscurePassword = true;
 
   @override
   void dispose() {
-    _userController.dispose();
+    _nameController.dispose();
+    _emailController.dispose();
     _passController.dispose();
     super.dispose();
   }
@@ -48,26 +51,27 @@ class _LoginScreenState extends State<LoginScreen> {
     bool success;
     if (_isRegisterMode) {
       success = await widget.userService.register(
-        _userController.text.trim(),
+        _nameController.text.trim(),
+        _emailController.text.trim(),
         _passController.text,
       );
       if (!success) {
         if (!mounted) return;
         setState(() {
-          _error = 'Usuário já existe. Tente outro nome.';
+          _error = 'Nome ou email já existe. Tente outro.';
           _loading = false;
         });
         return;
       }
     } else {
       success = await widget.userService.login(
-        _userController.text.trim(),
+        _emailController.text.trim(),
         _passController.text,
       );
       if (!success) {
         if (!mounted) return;
         setState(() {
-          _error = 'Usuário ou senha inválidos';
+          _error = 'Email ou senha inválidos';
           _loading = false;
         });
         return;
@@ -84,6 +88,15 @@ class _LoginScreenState extends State<LoginScreen> {
     if (userId != null) {
       widget.wineService.setCurrentUserId(userId);
       widget.syncService.setCurrentUserId(userId);
+      
+      // Tentar sincronizar dados após login
+      try {
+        await widget.syncService.syncAll();
+        print('✓ Sincronização completa após login');
+      } catch (e) {
+        print('⚠️ Erro na sincronização: $e');
+        // Continuar mesmo se falhar
+      }
     }
 
     if (!mounted) return;
@@ -134,29 +147,57 @@ class _LoginScreenState extends State<LoginScreen> {
                           style: Theme.of(context).textTheme.headlineSmall,
                         ),
                         const SizedBox(height: 32),
+                        if (_isRegisterMode) ...[
+                          TextFormField(
+                            controller: _nameController,
+                            decoration: const InputDecoration(
+                              labelText: 'Nome',
+                              prefixIcon: Icon(Icons.person),
+                              border: OutlineInputBorder(),
+                            ),
+                            textInputAction: TextInputAction.next,
+                            validator: (v) {
+                              if (v == null || v.isEmpty) return 'Informe o nome';
+                              if (v.length < 3) return 'Mínimo 3 caracteres';
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                        ],
                         TextFormField(
-                          controller: _userController,
+                          controller: _emailController,
                           decoration: const InputDecoration(
-                            labelText: 'Usuário',
-                            prefixIcon: Icon(Icons.person),
+                            labelText: 'Email',
+                            prefixIcon: Icon(Icons.email),
                             border: OutlineInputBorder(),
                           ),
+                          keyboardType: TextInputType.emailAddress,
                           textInputAction: TextInputAction.next,
                           validator: (v) {
-                            if (v == null || v.isEmpty) return 'Informe o usuário';
-                            if (v.length < 3) return 'Mínimo 3 caracteres';
+                            if (v == null || v.isEmpty) return 'Informe o email';
+                            if (!v.contains('@')) return 'Email inválido';
                             return null;
                           },
                         ),
                         const SizedBox(height: 16),
                         TextFormField(
                           controller: _passController,
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: 'Senha',
-                            prefixIcon: Icon(Icons.lock),
-                            border: OutlineInputBorder(),
+                            prefixIcon: const Icon(Icons.lock),
+                            border: const OutlineInputBorder(),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _obscurePassword = !_obscurePassword;
+                                });
+                              },
+                            ),
                           ),
-                          obscureText: true,
+                          obscureText: _obscurePassword,
                           onFieldSubmitted: (_) => _loading ? null : _submit(),
                           validator: (v) {
                             if (v == null || v.isEmpty) return 'Informe a senha';
