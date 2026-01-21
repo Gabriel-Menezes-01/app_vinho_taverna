@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "886089057823",
-    "project_id": "carta-vinhos-fd287",
-    "storage_bucket": "carta-vinhos-fd287.firebasestorage.app"
+    "project_number": "439489726638",
+    "project_id": "taverna-vinhos-eu-gm",
+    "storage_bucket": "taverna-vinhos-eu-gm.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:886089057823:android:a570aa684e5a4bfb68372a",
+        "mobilesdk_app_id": "1:439489726638:android:9e85c3989de213e150c53f",
         "android_client_info": {
           "package_name": "com.banco.cartavinhos"
         }
@@ -15,7 +15,26 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyBPrrNLffXoXq1FdbDYrQ0VJBuhvfujblU"
+          "current_key": "AIzaSyCHt_ZGMCQ3xRuN-GvcWRaPZKgSpnRsIHI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:439489726638:android:c29faaa66cabdb8550c53f",
+        "android_client_info": {
+          "package_name": "com.taverna.vinhos"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCHt_ZGMCQ3xRuN-GvcWRaPZKgSpnRsIHI"
         }
       ],
       "services": {

@@ -118,16 +118,37 @@ class MyApp extends StatelessWidget {
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
+              body: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Verificando usuário...'),
+                  ],
+                ),
+              ),
             );
           }
 
-          if (snapshot.data == true) {
-            return HomeScreen(
-              wineService: wineService,
+          // Se erro ou usuário não autenticado, ir para login
+          if (snapshot.hasError || snapshot.data != true) {
+            debugPrint('❌ Erro na autenticação ou usuário não logado: ${snapshot.error}');
+            return LoginScreen(
               userService: userService,
+              wineService: wineService,
               syncService: syncService,
               databaseService: databaseService,
+            );
+          }
+
+          // Usuário autenticado e verificado
+          debugPrint('✅ Usuário autenticado em ${Platform.operatingSystem}');
+          return HomeScreen(
+            wineService: wineService,
+            userService: userService,
+            syncService: syncService,
+            databaseService: databaseService,
             );
           }
 

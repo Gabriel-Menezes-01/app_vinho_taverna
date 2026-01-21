@@ -1,5 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'dart:io' show Platform;
 import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -208,11 +209,32 @@ class AuthService {
   Future<User?> login(String usernameOrEmail, String password) async {
     try {
       final hasInternet = await _hasInternetConnection();
+      final isWindows = Platform.isWindows;
       
       // Determinar se é email ou username
       final isEmail = usernameOrEmail.contains('@');
       
-      // Tentar obter o usuário local primeiro para descobrir o email (se for username)
+      // NO WINDOWS: Sempre tentar Firebase primeiro (não busca local)
+      if (isWindows && firebaseEnabled && _firebaseAuth != null && hasInternet) {
+        print('🪟 Windows: Buscando usuário no Firebase...');
+        
+        String? emailForFirebase;
+        
+        if (isEmail) {
+          emailForFirebase = usernameOrEmail;
+        } else {
+          // Buscar email pelo username no Firestore
+          emailForFirebase = await _findEmailByUsername(usernameOrEmail);
+          if (emailForFirebase == null) {
+            print('❌ Username não encontrado no Firebase');
+            return null;
+          }
+        }
+        
+        return await _loginWithFirebase(emailForFirebase, password);
+      }
+      
+      // Outras plataformas: Tentar obter o usuário local primeiro para descobrir o email (se for username)
       User? localUser;
       String? emailForFirebase;
       
@@ -226,79 +248,7 @@ class AuthService {
 
       // Se tiver Firebase e internet, tentar autenticar na nuvem primeiro e sincronizar local
       if (firebaseEnabled && _firebaseAuth != null && hasInternet && emailForFirebase != null) {
-        try {
-          final credential = await _firebaseAuth!
-              .signInWithEmailAndPassword(email: emailForFirebase, password: password)
-              .timeout(const Duration(seconds: 8));
-
-          if (credential.user != null) {
-            final firebaseUid = credential.user!.uid;
-            print('✓ Autenticado no Firebase: $firebaseUid');
-
-            // Salvar UID do Firebase
-            final prefs = await SharedPreferences.getInstance();
-            await prefs.setString(_firebaseUidKey, firebaseUid);
-
-            // Dados do perfil
-            String syncedEmail = credential.user!.email ?? emailForFirebase;
-            String syncedUsername = credential.user!.displayName ?? syncedEmail.split('@').first;
-
-            // Tentar carregar dados extras do Firestore
-            if (_firestore != null) {
-              try {
-                final userDoc = await _firestore!
-                    .collection('users')
-                    .doc(firebaseUid)
-                    .get();
-
-                if (userDoc.exists) {
-                  final data = userDoc.data();
-                  syncedUsername = data?['username'] ?? syncedUsername;
-                  syncedEmail = data?['email'] ?? syncedEmail;
-                  print('✓ Dados do usuário recuperados do Firestore');
-                }
-              } catch (e) {
-                print('⚠️ Erro ao recuperar dados do Firestore: $e');
-              }
-            }
-
-            // Garantir usuário local sincronizado com dados do Firebase
-            var updatedLocalUser = await _dbService.getUserByEmail(syncedEmail);
-            if (updatedLocalUser == null) {
-              final userId = await _dbService.createUser(
-                syncedUsername,
-                syncedEmail,
-                password, // salvar mesma senha digitada
-                firebaseUid: firebaseUid,
-              );
-              updatedLocalUser = await _dbService.getUserById(userId);
-              print('✓ Usuário local criado após login Firebase');
-            } else {
-              await _dbService.updateUser(
-                updatedLocalUser.id!,
-                username: syncedUsername,
-                email: syncedEmail,
-                password: password,
-                firebaseUid: firebaseUid,
-              );
-              updatedLocalUser = await _dbService.getUserById(updatedLocalUser.id!);
-              print('✓ Usuário local atualizado com dados do Firebase');
-            }
-
-            if (updatedLocalUser != null) {
-              await _saveSession(updatedLocalUser.id!);
-              
-              // SINCRONIZAR VINHOS DO FIREBASE para o dispositivo local
-              print('🔄 Iniciando sincronização de vinhos do Firebase...');
-              await _syncWinesFromFirebase(firebaseUid, updatedLocalUser.id!);
-              
-              return updatedLocalUser;
-            }
-          }
-        } catch (e) {
-          print('⚠️ Erro ao autenticar no Firebase: $e');
-          // Continua com fallback local
-        }
+        return await _loginWithFirebase(emailForFirebase, password);
       }
 
       // Autenticação local (fallback ou modo offline)
@@ -354,25 +304,48 @@ class AuthService {
         return null;
       }
 
+      // VERIFICAÇÃO 1: Checar no banco local (SQLite)
       final user = await _dbService.getUserById(userId);
       
       if (user == null) {
-        print('🔐 ⚠️ Usuário não existe mais no banco! Fazendo logout...');
+        print('🔐 ⚠️ Usuário NÃO existe no banco local! Fazendo logout...');
         await logout(); // Auto-logout se usuário foi deletado
         return null;
       }
       
-      // Verificar se o email existe
+      // VERIFICAÇÃO 2: Validar dados básicos
       if (user.email == null || user.email!.isEmpty) {
         print('🔐 ⚠️ Email vazio ou nulo! Fazendo logout...');
         await logout(); // Auto-logout se email foi apagado
         return null;
       }
+
+      // VERIFICAÇÃO 3: Se Firebase habilitado, verificar sincronização
+      if (firebaseEnabled && _firestore != null && user.firebaseUid != null && user.firebaseUid!.isNotEmpty) {
+        print('☁️ Verificando sincronização no Firebase...');
+        try {
+          final firebaseDoc = await _firestore!
+              .collection('users')
+              .doc(user.firebaseUid)
+              .get()
+              .timeout(const Duration(seconds: 5));
+          
+          if (!firebaseDoc.exists) {
+            print('🔐 ⚠️ Usuário não encontrado no Firestore! Fazendo logout...');
+            await logout();
+            return null;
+          }
+          print('☁️ ✅ Usuário sincronizado no Firestore');
+        } catch (e) {
+          print('⚠️ Erro ao verificar Firestore (continuando com cache local): $e');
+          // Continua com cache local se Firebase falhar
+        }
+      }
       
-      print('🔐 Usuário encontrado: ${user.username}');
+      print('🔐 ✅ Usuário verificado: ${user.username}');
       return user;
     } catch (e) {
-      print('🔐 Erro ao obter usuário atual: $e');
+      print('🔐 ❌ Erro ao obter usuário atual: $e');
       return null;
     }
   }
@@ -412,5 +385,118 @@ class AuthService {
 
     final user = await getCurrentUser();
     return user?.firebaseUid;
+  }
+
+  // Buscar email pelo username no Firestore
+  Future<String?> _findEmailByUsername(String username) async {
+    try {
+      if (_firestore == null) return null;
+      
+      print('🔍 Buscando email do username "$username" no Firestore...');
+      
+      final querySnapshot = await _firestore!
+          .collection('users')
+          .where('username', isEqualTo: username)
+          .limit(1)
+          .get()
+          .timeout(const Duration(seconds: 10));
+      
+      if (querySnapshot.docs.isEmpty) {
+        print('❌ Username "$username" não encontrado');
+        return null;
+      }
+      
+      final email = querySnapshot.docs.first.data()['email'] as String?;
+      print('✅ Email encontrado: $email');
+      return email;
+    } catch (e) {
+      print('❌ Erro ao buscar email: $e');
+      return null;
+    }
+  }
+
+  // Login com Firebase (extraído para reutilização)
+  Future<User?> _loginWithFirebase(String email, String password) async {
+    try {
+      print('🔐 Autenticando no Firebase com email: $email');
+      
+      final credential = await _firebaseAuth!
+          .signInWithEmailAndPassword(email: email, password: password)
+          .timeout(const Duration(seconds: 10));
+
+      if (credential.user == null) {
+        print('❌ Credenciais inválidas');
+        return null;
+      }
+
+      final firebaseUid = credential.user!.uid;
+      print('✅ Autenticado no Firebase: $firebaseUid');
+
+      // Salvar UID do Firebase
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_firebaseUidKey, firebaseUid);
+
+      // Dados do perfil
+      String syncedEmail = credential.user!.email ?? email;
+      String syncedUsername = credential.user!.displayName ?? syncedEmail.split('@').first;
+
+      // Tentar carregar dados extras do Firestore
+      if (_firestore != null) {
+        try {
+          final userDoc = await _firestore!
+              .collection('users')
+              .doc(firebaseUid)
+              .get()
+              .timeout(const Duration(seconds: 10));
+
+          if (userDoc.exists) {
+            final data = userDoc.data();
+            syncedUsername = data?['username'] ?? syncedUsername;
+            syncedEmail = data?['email'] ?? syncedEmail;
+            print('✅ Dados do usuário recuperados do Firestore');
+          }
+        } catch (e) {
+          print('⚠️ Erro ao recuperar dados do Firestore: $e');
+        }
+      }
+
+      // Garantir usuário local sincronizado com dados do Firebase
+      var updatedLocalUser = await _dbService.getUserByEmail(syncedEmail);
+      if (updatedLocalUser == null) {
+        final userId = await _dbService.createUser(
+          syncedUsername,
+          syncedEmail,
+          password,
+          firebaseUid: firebaseUid,
+        );
+        updatedLocalUser = await _dbService.getUserById(userId);
+        print('✅ Usuário local criado após login Firebase');
+      } else {
+        await _dbService.updateUser(
+          updatedLocalUser.id!,
+          username: syncedUsername,
+          email: syncedEmail,
+          password: password,
+          firebaseUid: firebaseUid,
+        );
+        updatedLocalUser = await _dbService.getUserById(updatedLocalUser.id!);
+        print('✅ Usuário local atualizado com dados do Firebase');
+      }
+
+      if (updatedLocalUser != null) {
+        await _saveSession(updatedLocalUser.id!);
+        
+        // SINCRONIZAR VINHOS DO FIREBASE para o dispositivo local
+        print('🔄 Iniciando sincronização de vinhos do Firebase...');
+        await _syncWinesFromFirebase(firebaseUid, updatedLocalUser.id!);
+        
+        return updatedLocalUser;
+      }
+      
+      return null;
+    } catch (e) {
+      print('❌ Erro ao fazer login no Firebase: $e');
+      return null;
+    }
   }
 }

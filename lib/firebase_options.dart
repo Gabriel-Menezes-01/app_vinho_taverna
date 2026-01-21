@@ -41,51 +41,49 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyD8P2F6w3xO3LOTdOXmzxklWEuTocbdma0',
-    appId: '1:886089057823:web:0a52c33ef73b249568372a',
-    messagingSenderId: '886089057823',
-    projectId: 'carta-vinhos-fd287',
-    authDomain: 'carta-vinhos-fd287.firebaseapp.com',
-    storageBucket: 'carta-vinhos-fd287.firebasestorage.app',
+    apiKey: 'AIzaSyDf8bG_rH7pP8h4XPxuPAtZO1jhPNR7u2Q',
+    appId: '1:439489726638:web:8d22eee21da0b23650c53f',
+    messagingSenderId: '439489726638',
+    projectId: 'taverna-vinhos-eu-gm',
+    authDomain: 'taverna-vinhos-eu-gm.firebaseapp.com',
+    storageBucket: 'taverna-vinhos-eu-gm.firebasestorage.app',
+    measurementId: 'G-J7JLY4SXWH',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyD8P2F6w3xO3LOTdOXmzxklWEuTocbdma0',
-    appId: '1:886089057823:android:ANDROID_APP_ID',
-    messagingSenderId: '886089057823',
-    projectId: 'carta-vinhos-fd287',
-    authDomain: 'carta-vinhos-fd287.firebaseapp.com',
-    storageBucket: 'carta-vinhos-fd287.firebasestorage.app',
+    apiKey: 'AIzaSyCHt_ZGMCQ3xRuN-GvcWRaPZKgSpnRsIHI',
+    appId: '1:439489726638:android:9e85c3989de213e150c53f',
+    messagingSenderId: '439489726638',
+    projectId: 'taverna-vinhos-eu-gm',
+    storageBucket: 'taverna-vinhos-eu-gm.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyD8P2F6w3xO3LOTdOXmzxklWEuTocbdma0',
-    appId: '1:886089057823:ios:IOS_APP_ID',
-    messagingSenderId: '886089057823',
-    projectId: 'carta-vinhos-fd287',
-    authDomain: 'carta-vinhos-fd287.firebaseapp.com',
-    storageBucket: 'carta-vinhos-fd287.firebasestorage.app',
-    iosClientId: '',
+    apiKey: 'AIzaSyCLDkVcmzpzV1JkyBMb1OnP2I7JeH1__tg',
+    appId: '1:439489726638:ios:e5cdc31055f5ad7750c53f',
+    messagingSenderId: '439489726638',
+    projectId: 'taverna-vinhos-eu-gm',
+    storageBucket: 'taverna-vinhos-eu-gm.firebasestorage.app',
     iosBundleId: 'com.example.appVinhoTaverna',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyD8P2F6w3xO3LOTdOXmzxklWEuTocbdma0',
-    appId: '1:886089057823:ios:IOS_APP_ID',
-    messagingSenderId: '886089057823',
-    projectId: 'carta-vinhos-fd287',
-    authDomain: 'carta-vinhos-fd287.firebaseapp.com',
-    storageBucket: 'carta-vinhos-fd287.firebasestorage.app',
-    iosClientId: '',
+    apiKey: 'AIzaSyCLDkVcmzpzV1JkyBMb1OnP2I7JeH1__tg',
+    appId: '1:439489726638:ios:e5cdc31055f5ad7750c53f',
+    messagingSenderId: '439489726638',
+    projectId: 'taverna-vinhos-eu-gm',
+    storageBucket: 'taverna-vinhos-eu-gm.firebasestorage.app',
     iosBundleId: 'com.example.appVinhoTaverna',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyD8P2F6w3xO3LOTdOXmzxklWEuTocbdma0',
-    appId: '1:886089057823:web:0a52c33ef73b249568372a',
-    messagingSenderId: '886089057823',
-    projectId: 'carta-vinhos-fd287',
-    authDomain: 'carta-vinhos-fd287.firebaseapp.com',
-    storageBucket: 'carta-vinhos-fd287.firebasestorage.app',
+    apiKey: 'AIzaSyDf8bG_rH7pP8h4XPxuPAtZO1jhPNR7u2Q',
+    appId: '1:439489726638:web:add793d62560c70a50c53f',
+    messagingSenderId: '439489726638',
+    projectId: 'taverna-vinhos-eu-gm',
+    authDomain: 'taverna-vinhos-eu-gm.firebaseapp.com',
+    storageBucket: 'taverna-vinhos-eu-gm.firebasestorage.app',
+    measurementId: 'G-54X2B1TD0Y',
   );
+
 }

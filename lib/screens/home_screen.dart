@@ -12,6 +12,7 @@ import 'add_edit_wine_screen.dart';
 import 'sales_screen.dart';
 import 'login_screen.dart';
 import 'sold_out_wines_screen.dart';
+import 'adega_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final WineService wineService;
@@ -52,13 +53,38 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _loading = true);
     
     try {
-      // Carregar usuário atual e configurar no WineService
+      // VERIFICAÇÃO CRÍTICA: Confirmar que usuário ainda existe no banco
       final user = await widget.userService?.getUserAsync();
       print('👤 Usuário carregado: ${user?.username ?? "NENHUM"}');
       
-      if (user != null && user.id != null) {
+      if (user == null || user.id == null) {
+        print('❌ Usuário não encontrado no banco! Redirecionando para login...');
+        if (mounted) {
+          Navigator.of(context).pushNamedAndRemoveUntil(
+            '/login',
+            (route) => false,
+          );
+          // Fallback se rota nomeada não existir
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (_) => LoginScreen(
+              userService: widget.userService!,
+              wineService: widget.wineService,
+              syncService: widget.syncService,
+              databaseService: widget.databaseService,
+            )),
+            (route) => false,
+          );
+        }
+        return;
+      }
+      
+      if (user.id != null) {
         print('⚙️ Configurando usuário ${user.id} no WineService e SyncService');
         widget.wineService.setCurrentUserId(user.id!);
+        if (user.email != null && user.email!.isNotEmpty) {
+          widget.wineService.setCurrentUserEmail(user.email!);
+        }
         widget.syncService.setCurrentUserId(user.id!);
 
         // Vincular UID do Firebase (se existir) para sincronização entre dispositivos
@@ -67,7 +93,10 @@ class _HomeScreenState extends State<HomeScreen> {
             : await widget.userService?.getFirebaseUid();
         if (firebaseUid != null && firebaseUid.isNotEmpty) {
           widget.syncService.setFirebaseUid(firebaseUid);
-          print('☁️ SyncService usando firebaseUid=$firebaseUid');
+          widget.wineService.setFirebaseUid(firebaseUid);
+          print('☁️ Firebase UID configurado:');
+          print('   ▪ SyncService: $firebaseUid');
+          print('   ▪ WineService: $firebaseUid');
         }
         
         // Tentar sincronizar com servidor
@@ -79,8 +108,6 @@ class _HomeScreenState extends State<HomeScreen> {
           print('⚠️ Erro na sincronização: $e');
           // Continua mesmo se falhar - dados locais ainda funcionam
         }
-      } else {
-        print('ℹ️ Nenhum usuário logado, pulando sincronização');
       }
       
       final wines = await widget.wineService.getAllWines();
@@ -88,8 +115,8 @@ class _HomeScreenState extends State<HomeScreen> {
       
       if (mounted) {
         setState(() {
-          _username = user?.username;
-          _email = user?.email;
+          _username = user.username;
+          _email = user.email;
           _wines = wines;
           _loading = false;
         });
@@ -101,6 +128,17 @@ class _HomeScreenState extends State<HomeScreen> {
         setState(() {
           _loading = false;
         });
+        // Em caso de erro crítico, voltar para login
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => LoginScreen(
+            userService: widget.userService!,
+            wineService: widget.wineService,
+            syncService: widget.syncService,
+            databaseService: widget.databaseService,
+          )),
+          (route) => false,
+        );
       }
     }
   }
@@ -136,6 +174,21 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
     }
+  }
+
+  void _openAdegaScreen() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AdegaScreen(
+          wineService: widget.wineService,
+          userService: widget.userService,
+        ),
+      ),
+    ).then((_) {
+      // Recarregar vinhos ao voltar da adega
+      _loadData();
+    });
   }
 
   Future<void> _goToSoldOutTab() async {
@@ -296,6 +349,8 @@ class _HomeScreenState extends State<HomeScreen> {
             onSelected: (value) {
               if (value == 'add') {
                 _handleAddWine();
+              } else if (value == 'adega') {
+                _openAdegaScreen();
               } else if (value == 'sales') {
                 _openSalesScreen();
               } else if (value == 'soldout') {
@@ -340,6 +395,16 @@ class _HomeScreenState extends State<HomeScreen> {
                     Icon(Icons.add_circle_outline, size: 20),
                     SizedBox(width: 12),
                     Text('Adicionar vinho'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem<String>(
+                value: 'adega',
+                child: Row(
+                  children: [
+                    Icon(Icons.wine_bar, size: 20, color: Color(0xFF722F37)),
+                    SizedBox(width: 12),
+                    Text('🍷 Adega'),
                   ],
                 ),
               ),

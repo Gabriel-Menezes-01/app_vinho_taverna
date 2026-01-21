@@ -1,0 +1,27 @@
+// COPIE ESTAS REGRAS NO CONSOLE FIRESTORE (Firestore Database > Rules)
+// Permitir que o mesmo usuário acesse seus dados em múltiplos dispositivos
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Coleção de usuários - dados compartilhados entre dispositivos
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      
+      // Subcoleção de vinhos do usuário - sincronizados entre dispositivos
+      match /wines/{wineId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      // Subcoleção de vendas do usuário
+      match /sales/{saleId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+    
+    // Coleção de teste (remover em produção)
+    match /test/{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

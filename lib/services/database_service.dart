@@ -1,7 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart';
-import 'dart:io' show Platform;
+import 'dart:io' show Platform, File;
 import 'package:flutter/foundation.dart';
 import '../models/user.dart';
 import '../models/wine.dart';
@@ -41,6 +41,35 @@ class DatabaseService {
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
+  }
+
+  /// Apaga todos os arquivos do banco (db, wal, shm) e fecha a conexão atual.
+  Future<void> deleteLocalDatabase() async {
+    final dbPath = await getDatabasesPath();
+    final path = join(dbPath, _dbName);
+
+    // Fechar conexão aberta antes de apagar
+    if (_database != null) {
+      await _database!.close();
+      _database = null;
+    }
+
+    try {
+      await deleteDatabase(path);
+
+      // Garantir remoção de arquivos auxiliares do SQLite
+      for (final suffix in const ['-wal', '-shm']) {
+        final file = File('$path$suffix');
+        if (await file.exists()) {
+          await file.delete();
+        }
+      }
+
+      debugPrint('🗑️ Banco local removido em: $path');
+    } catch (e) {
+      debugPrint('⚠️ Erro ao apagar banco local: $e');
+      rethrow;
+    }
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {

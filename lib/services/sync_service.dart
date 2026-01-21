@@ -76,21 +76,31 @@ class SyncService {
 
   // Upload de vinhos não sincronizados
   Future<void> uploadUnsyncedWines() async {
-    if (!firebaseEnabled || _firestore == null) return;
-    if (_currentUserId == null && _firebaseUid == null) return;
+    if (!firebaseEnabled || _firestore == null) {
+      print('ℹ️ Firebase não habilitado - vinhos salvos apenas localmente');
+      return;
+    }
+    if (_currentUserId == null && _firebaseUid == null) {
+      print('⚠️ Usuário não configurado - não é possível sincronizar');
+      return;
+    }
 
     final remoteUserDoc = _remoteUserDocId;
-    if (remoteUserDoc == null || remoteUserDoc.isEmpty) return;
+    if (remoteUserDoc == null || remoteUserDoc.isEmpty) {
+      print('⚠️ ID de usuário remoto inválido');
+      return;
+    }
 
     final unsyncedWines = await _dbService.getUnsyncedWines(_currentUserId!);
 
     if (unsyncedWines.isEmpty) {
-      print('Nenhum vinho para sincronizar.');
+      print('✓ Nenhum vinho pendente de sincronização');
       return;
     }
 
-    print('Enviando ${unsyncedWines.length} vinhos para o servidor...');
+    print('📤 Enviando ${unsyncedWines.length} vinhos para Firestore (usuário: $remoteUserDoc)...');
 
+    int successCount = 0;
     for (final wine in unsyncedWines) {
       try {
         // Salvar no Firestore na coleção do usuário com timeout
@@ -99,20 +109,23 @@ class SyncService {
           .doc(remoteUserDoc)
             .collection('wines')
             .doc(wine.id)
-            .set(wine.toFirestore())
+            .set(wine.toFirestore(), SetOptions(merge: true))
             .timeout(const Duration(seconds: 10), onTimeout: () {
               throw Exception('Timeout ao sincronizar vinho ${wine.name}');
             });
 
         // Marcar como sincronizado localmente
         await _dbService.markWineAsSynced(wine.id, _currentUserId!);
+        successCount++;
 
-        print('✅ Vinho ${wine.name} sincronizado com sucesso!');
+        print('  ✅ ${wine.name} → Firestore');
       } catch (e) {
-        print('⚠️ Erro ao sincronizar vinho ${wine.name}: $e');
+        print('  ⚠️ Erro ao sincronizar ${wine.name}: $e');
         // Continuar sincronizando os outros vinhos
       }
     }
+    
+    print('📤 Upload completo: $successCount/${unsyncedWines.length} vinhos sincronizados');
   }
 
   // Download de vinhos do servidor usando firebaseUid (para sincronização entre dispositivos)
@@ -172,13 +185,22 @@ class SyncService {
 
   // Download de vinhos do servidor
   Future<void> downloadWinesFromServer() async {
-    if (!firebaseEnabled || _firestore == null) return;
-    if (_currentUserId == null && _firebaseUid == null) return;
+    if (!firebaseEnabled || _firestore == null) {
+      print('ℹ️ Firebase não habilitado - usando apenas dados locais');
+      return;
+    }
+    if (_currentUserId == null && _firebaseUid == null) {
+      print('⚠️ Usuário não configurado - não é possível baixar vinhos');
+      return;
+    }
 
     final remoteUserDoc = _remoteUserDocId;
-    if (remoteUserDoc == null || remoteUserDoc.isEmpty) return;
+    if (remoteUserDoc == null || remoteUserDoc.isEmpty) {
+      print('⚠️ ID de usuário remoto inválido');
+      return;
+    }
 
-    print('Baixando vinhos do servidor...');
+    print('📥 Buscando vinhos do Firestore (usuário: $remoteUserDoc)...');
 
     try {
       // Buscar vinhos do servidor
@@ -186,45 +208,50 @@ class SyncService {
           .collection('users')
           .doc(remoteUserDoc)
           .collection('wines')
-          .get();
+          .get()
+          .timeout(const Duration(seconds: 15));
+
+      print('📥 Encontrados ${snapshot.docs.length} vinhos no Firestore');
 
       // Obter IDs dos vinhos locais
       final localWines = await _dbService.getWinesByUser(_currentUserId!);
       final localWineIds = localWines.map((w) => w.id).toSet();
 
       int newWinesCount = 0;
+      int updatedWinesCount = 0;
 
       for (final doc in snapshot.docs) {
-        final serverWine = Wine.fromFirestore(doc.data());
+        try {
+          final serverWine = Wine.fromFirestore(doc.data());
 
-        // Se o vinho não existe localmente, adicionar
-        if (!localWineIds.contains(serverWine.id)) {
-          await _dbService.insertWine(serverWine, _currentUserId!);
-          await _dbService.markWineAsSynced(serverWine.id, _currentUserId!);
-          newWinesCount++;
-          print('Vinho ${serverWine.name} baixado do servidor!');
-        } else {
-          // Verificar se o vinho do servidor é mais recente
-          final localWine = localWines.firstWhere((w) => w.id == serverWine.id);
-          if (serverWine.lastModified != null &&
-              localWine.lastModified != null &&
-              serverWine.lastModified!.isAfter(localWine.lastModified!)) {
-            // Atualizar com dados mais recentes do servidor
-            await _dbService.updateWine(serverWine, _currentUserId!);
+          // Se o vinho não existe localmente, adicionar
+          if (!localWineIds.contains(serverWine.id)) {
+            await _dbService.insertWine(serverWine, _currentUserId!);
             await _dbService.markWineAsSynced(serverWine.id, _currentUserId!);
-            print('Vinho ${serverWine.name} atualizado com dados do servidor!');
+            newWinesCount++;
+            print('  ✅ ${serverWine.name} → Local (novo)');
+          } else {
+            // Verificar se o vinho do servidor é mais recente
+            final localWine = localWines.firstWhere((w) => w.id == serverWine.id);
+            if (serverWine.lastModified != null &&
+                localWine.lastModified != null &&
+                serverWine.lastModified!.isAfter(localWine.lastModified!)) {
+              // Atualizar com dados mais recentes do servidor
+              await _dbService.updateWine(serverWine, _currentUserId!);
+              await _dbService.markWineAsSynced(serverWine.id, _currentUserId!);
+              updatedWinesCount++;
+              print('  ✅ ${serverWine.name} → Local (atualizado)');
+            }
           }
+        } catch (e) {
+          print('  ⚠️ Erro ao processar vinho: $e');
         }
       }
 
-      if (newWinesCount > 0) {
-        print('$newWinesCount novos vinhos baixados do servidor!');
-      } else {
-        print('Nenhum vinho novo no servidor.');
-      }
+      print('📥 Download completo: $newWinesCount novos, $updatedWinesCount atualizados');
     } catch (e) {
-      print('Erro ao baixar vinhos do servidor: $e');
-      rethrow;
+      print('❌ Erro ao baixar vinhos do Firestore: $e');
+      // Não lançar exceção - app deve funcionar offline
     }
   }
 

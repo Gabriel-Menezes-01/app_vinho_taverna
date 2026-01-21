@@ -3,17 +3,17 @@
 <plist version="1.0">
 <dict>
 	<key>API_KEY</key>
-	<string>AIzaSyDRVKaDM4oiGsrO1DKAJ2_dtH6dQiSMlLQ</string>
+	<string>AIzaSyCLDkVcmzpzV1JkyBMb1OnP2I7JeH1__tg</string>
 	<key>GCM_SENDER_ID</key>
-	<string>886089057823</string>
+	<string>439489726638</string>
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.banco.cartavinhos</string>
+	<string>com.taverna.vinhosApple</string>
 	<key>PROJECT_ID</key>
-	<string>carta-vinhos-fd287</string>
+	<string>taverna-vinhos-eu-gm</string>
 	<key>STORAGE_BUCKET</key>
-	<string>carta-vinhos-fd287.firebasestorage.app</string>
+	<string>taverna-vinhos-eu-gm.firebasestorage.app</string>
 	<key>IS_ADS_ENABLED</key>
 	<false></false>
 	<key>IS_ANALYTICS_ENABLED</key>
@@ -25,6 +25,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:886089057823:ios:84af8468d861982068372a</string>
+	<string>1:439489726638:ios:3793f9271f8288e550c53f</string>
 </dict>
 </plist>

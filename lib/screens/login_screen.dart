@@ -88,17 +88,52 @@ class _LoginScreenState extends State<LoginScreen> {
     if (userId != null) {
       widget.wineService.setCurrentUserId(userId);
       widget.syncService.setCurrentUserId(userId);
+      widget.wineService.setCurrentUserEmail(_emailController.text.trim());
+      
+      // IMPORTANTE: Configurar Firebase UID para sincronização entre dispositivos
+      final firebaseUid = await widget.userService.getFirebaseUid();
+      if (firebaseUid != null && firebaseUid.isNotEmpty) {
+        widget.syncService.setFirebaseUid(firebaseUid);
+        widget.wineService.setFirebaseUid(firebaseUid);
+        print('☁️ Firebase UID configurado: $firebaseUid');
+      }
       
       // Tentar sincronizar dados após login
       try {
+        print('🔄 Iniciando sincronização após login...');
         await widget.syncService.syncAll();
-        print('✓ Sincronização completa após login');
+        print('✅ Sincronização completa após login!');
+        
+        // Mostrar mensagem de sucesso
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ Vinhos sincronizados com sucesso!'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
       } catch (e) {
         print('⚠️ Erro na sincronização: $e');
         // Continuar mesmo se falhar
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('⚠️ Sincronização falhou. Usando dados locais.'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
       }
     }
 
+    if (!mounted) return;
+
+    // Aguardar um pouco para a mensagem aparecer antes de navegar
+    await Future.delayed(const Duration(milliseconds: 500));
+    
     if (!mounted) return;
 
     Navigator.pushReplacement(
