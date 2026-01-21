@@ -129,6 +129,10 @@ class AuthService {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(_firebaseUidKey, firebaseUid);
 
+        // Persistir UID do Firebase no usuário local para sincronização entre dispositivos
+        await _dbService.updateUser(localUserId, firebaseUid: firebaseUid);
+        print('✓ firebaseUid persistido localmente para o usuário $localUserId');
+
         print('✅ Usuário criado no Firebase Auth: $firebaseUid');
       }
     } catch (e) {
@@ -200,16 +204,31 @@ class AuthService {
     }
   }
 
-  // Login de usuário
-  Future<User?> login(String email, String password) async {
+  // Login de usuário (aceita username ou email)
+  Future<User?> login(String usernameOrEmail, String password) async {
     try {
       final hasInternet = await _hasInternetConnection();
+      
+      // Determinar se é email ou username
+      final isEmail = usernameOrEmail.contains('@');
+      
+      // Tentar obter o usuário local primeiro para descobrir o email (se for username)
+      User? localUser;
+      String? emailForFirebase;
+      
+      if (isEmail) {
+        localUser = await _dbService.getUserByEmail(usernameOrEmail);
+        emailForFirebase = usernameOrEmail;
+      } else {
+        localUser = await _dbService.getUserByUsername(usernameOrEmail);
+        emailForFirebase = localUser?.email;
+      }
 
       // Se tiver Firebase e internet, tentar autenticar na nuvem primeiro e sincronizar local
-      if (firebaseEnabled && _firebaseAuth != null && hasInternet) {
+      if (firebaseEnabled && _firebaseAuth != null && hasInternet && emailForFirebase != null) {
         try {
           final credential = await _firebaseAuth!
-              .signInWithEmailAndPassword(email: email, password: password)
+              .signInWithEmailAndPassword(email: emailForFirebase, password: password)
               .timeout(const Duration(seconds: 8));
 
           if (credential.user != null) {
@@ -221,7 +240,7 @@ class AuthService {
             await prefs.setString(_firebaseUidKey, firebaseUid);
 
             // Dados do perfil
-            String syncedEmail = credential.user!.email ?? email;
+            String syncedEmail = credential.user!.email ?? emailForFirebase;
             String syncedUsername = credential.user!.displayName ?? syncedEmail.split('@').first;
 
             // Tentar carregar dados extras do Firestore
@@ -244,36 +263,36 @@ class AuthService {
             }
 
             // Garantir usuário local sincronizado com dados do Firebase
-            var localUser = await _dbService.getUserByEmail(syncedEmail);
-            if (localUser == null) {
+            var updatedLocalUser = await _dbService.getUserByEmail(syncedEmail);
+            if (updatedLocalUser == null) {
               final userId = await _dbService.createUser(
                 syncedUsername,
                 syncedEmail,
                 password, // salvar mesma senha digitada
                 firebaseUid: firebaseUid,
               );
-              localUser = await _dbService.getUserById(userId);
+              updatedLocalUser = await _dbService.getUserById(userId);
               print('✓ Usuário local criado após login Firebase');
             } else {
               await _dbService.updateUser(
-                localUser.id!,
+                updatedLocalUser.id!,
                 username: syncedUsername,
                 email: syncedEmail,
                 password: password,
                 firebaseUid: firebaseUid,
               );
-              localUser = await _dbService.getUserById(localUser.id!);
+              updatedLocalUser = await _dbService.getUserById(updatedLocalUser.id!);
               print('✓ Usuário local atualizado com dados do Firebase');
             }
 
-            if (localUser != null) {
-              await _saveSession(localUser.id!);
+            if (updatedLocalUser != null) {
+              await _saveSession(updatedLocalUser.id!);
               
               // SINCRONIZAR VINHOS DO FIREBASE para o dispositivo local
               print('🔄 Iniciando sincronização de vinhos do Firebase...');
-              await _syncWinesFromFirebase(firebaseUid, localUser.id!);
+              await _syncWinesFromFirebase(firebaseUid, updatedLocalUser.id!);
               
-              return localUser;
+              return updatedLocalUser;
             }
           }
         } catch (e) {
@@ -283,19 +302,24 @@ class AuthService {
       }
 
       // Autenticação local (fallback ou modo offline)
-      print('🔍 Tentando login local com email: $email');
-      final user = await _dbService.getUserByEmail(email);
+      if (isEmail) {
+        print('🔍 Tentando login local com email: $usernameOrEmail');
+        localUser = await _dbService.getUserByEmail(usernameOrEmail);
+      } else {
+        print('🔍 Tentando login local com username: $usernameOrEmail');
+        localUser = await _dbService.getUserByUsername(usernameOrEmail);
+      }
       
-      if (user == null) {
-        print('❌ Usuário não encontrado no banco local: $email');
+      if (localUser == null) {
+        print('❌ Usuário não encontrado no banco local: $usernameOrEmail');
         return null;
       }
 
-      print('✓ Usuário encontrado: ${user.username} (${user.email})');
+      print('✓ Usuário encontrado: ${localUser.username} (${localUser.email})');
       
       // Verificar senha (em texto plano)
       print('🔐 Verificando senha...');
-      if (user.password != password) {
+      if (localUser.password != password) {
         print('❌ Senha incorreta');
         return null;
       }
@@ -303,9 +327,9 @@ class AuthService {
       print('✅ Senha correta! Login bem-sucedido');
       
       // Salvar sessão
-      await _saveSession(user.id!);
+      await _saveSession(localUser.id!);
 
-      return user;
+      return localUser;
     } catch (e) {
       print('❌ Erro no login: $e');
       return null;
@@ -372,5 +396,21 @@ class AuthService {
   Future<int?> getCurrentUserId() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getInt(_currentUserKey);
+  }
+
+  // Obter UID Firebase atual (ordem de preferência: sessão Auth, SharedPreferences, banco local)
+  Future<String?> getFirebaseUid() async {
+    if (firebaseEnabled && _firebaseAuth?.currentUser != null) {
+      return _firebaseAuth!.currentUser!.uid;
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    final stored = prefs.getString(_firebaseUidKey);
+    if (stored != null && stored.isNotEmpty) {
+      return stored;
+    }
+
+    final user = await getCurrentUser();
+    return user?.firebaseUid;
   }
 }

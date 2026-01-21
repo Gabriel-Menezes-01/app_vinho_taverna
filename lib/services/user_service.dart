@@ -40,4 +40,8 @@ class UserService {
   Future<int?> getCurrentUserId() async {
     return await _authService.getCurrentUserId();
   }
+
+  Future<String?> getFirebaseUid() async {
+    return await _authService.getFirebaseUid();
+  }
 }

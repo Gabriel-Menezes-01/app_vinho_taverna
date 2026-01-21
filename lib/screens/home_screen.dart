@@ -60,6 +60,15 @@ class _HomeScreenState extends State<HomeScreen> {
         print('⚙️ Configurando usuário ${user.id} no WineService e SyncService');
         widget.wineService.setCurrentUserId(user.id!);
         widget.syncService.setCurrentUserId(user.id!);
+
+        // Vincular UID do Firebase (se existir) para sincronização entre dispositivos
+        final firebaseUid = user.firebaseUid?.isNotEmpty == true
+            ? user.firebaseUid
+            : await widget.userService?.getFirebaseUid();
+        if (firebaseUid != null && firebaseUid.isNotEmpty) {
+          widget.syncService.setFirebaseUid(firebaseUid);
+          print('☁️ SyncService usando firebaseUid=$firebaseUid');
+        }
         
         // Tentar sincronizar com servidor
         try {

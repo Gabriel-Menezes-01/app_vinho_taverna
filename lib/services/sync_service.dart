@@ -8,6 +8,7 @@ class SyncService {
   final bool firebaseEnabled;
   FirebaseFirestore? _firestore;
   int? _currentUserId;
+  String? _firebaseUid;
 
   SyncService(this._dbService, {this.firebaseEnabled = false}) {
     if (firebaseEnabled) {
@@ -21,6 +22,14 @@ class SyncService {
 
   void setCurrentUserId(int userId) {
     _currentUserId = userId;
+  }
+
+  void setFirebaseUid(String? firebaseUid) {
+    _firebaseUid = firebaseUid;
+  }
+
+  String? get _remoteUserDocId {
+    return _firebaseUid ?? _currentUserId?.toString();
   }
 
   // Verificar se há conexão com internet
@@ -37,8 +46,8 @@ class SyncService {
       return;
     }
 
-    if (_currentUserId == null) {
-      print('⚠️ Usuário não configurado para sincronização');
+    if (_currentUserId == null && _firebaseUid == null) {
+      print('⚠️ Usuário não configurado para sincronização (faltando userId/firebaseUid)');
       return; // Não lançar exceção, apenas retornar
     }
 
@@ -68,7 +77,10 @@ class SyncService {
   // Upload de vinhos não sincronizados
   Future<void> uploadUnsyncedWines() async {
     if (!firebaseEnabled || _firestore == null) return;
-    if (_currentUserId == null) return;
+    if (_currentUserId == null && _firebaseUid == null) return;
+
+    final remoteUserDoc = _remoteUserDocId;
+    if (remoteUserDoc == null || remoteUserDoc.isEmpty) return;
 
     final unsyncedWines = await _dbService.getUnsyncedWines(_currentUserId!);
 
@@ -84,7 +96,7 @@ class SyncService {
         // Salvar no Firestore na coleção do usuário com timeout
         await _firestore!
             .collection('users')
-            .doc(_currentUserId.toString())
+          .doc(remoteUserDoc)
             .collection('wines')
             .doc(wine.id)
             .set(wine.toFirestore())
@@ -161,7 +173,10 @@ class SyncService {
   // Download de vinhos do servidor
   Future<void> downloadWinesFromServer() async {
     if (!firebaseEnabled || _firestore == null) return;
-    if (_currentUserId == null) return;
+    if (_currentUserId == null && _firebaseUid == null) return;
+
+    final remoteUserDoc = _remoteUserDocId;
+    if (remoteUserDoc == null || remoteUserDoc.isEmpty) return;
 
     print('Baixando vinhos do servidor...');
 
@@ -169,7 +184,7 @@ class SyncService {
       // Buscar vinhos do servidor
       final snapshot = await _firestore!
           .collection('users')
-          .doc(_currentUserId.toString())
+          .doc(remoteUserDoc)
           .collection('wines')
           .get();
 
@@ -216,12 +231,15 @@ class SyncService {
   // Deletar vinho do servidor
   Future<void> deleteWineFromServer(String wineId) async {
     if (!firebaseEnabled || _firestore == null) return;
-    if (_currentUserId == null) return;
+    if (_currentUserId == null && _firebaseUid == null) return;
+
+    final remoteUserDoc = _remoteUserDocId;
+    if (remoteUserDoc == null || remoteUserDoc.isEmpty) return;
 
     try {
       await _firestore!
           .collection('users')
-          .doc(_currentUserId.toString())
+          .doc(remoteUserDoc)
           .collection('wines')
           .doc(wineId)
           .delete();

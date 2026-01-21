@@ -71,7 +71,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!success) {
         if (!mounted) return;
         setState(() {
-          _error = 'Email ou senha inválidos';
+          _error = 'Username/email ou senha inválidos';
           _loading = false;
         });
         return;
@@ -166,16 +166,21 @@ class _LoginScreenState extends State<LoginScreen> {
                         ],
                         TextFormField(
                           controller: _emailController,
-                          decoration: const InputDecoration(
-                            labelText: 'Email',
-                            prefixIcon: Icon(Icons.email),
-                            border: OutlineInputBorder(),
+                          decoration: InputDecoration(
+                            labelText: _isRegisterMode ? 'Email' : 'Username ou Email',
+                            prefixIcon: Icon(_isRegisterMode ? Icons.email : Icons.person),
+                            border: const OutlineInputBorder(),
+                            hintText: _isRegisterMode ? null : 'Digite seu username ou email',
                           ),
-                          keyboardType: TextInputType.emailAddress,
+                          keyboardType: _isRegisterMode ? TextInputType.emailAddress : TextInputType.text,
                           textInputAction: TextInputAction.next,
                           validator: (v) {
-                            if (v == null || v.isEmpty) return 'Informe o email';
-                            if (!v.contains('@')) return 'Email inválido';
+                            if (v == null || v.isEmpty) {
+                              return _isRegisterMode ? 'Informe o email' : 'Informe username ou email';
+                            }
+                            if (_isRegisterMode && !v.contains('@')) {
+                              return 'Email inválido';
+                            }
                             return null;
                           },
                         ),
