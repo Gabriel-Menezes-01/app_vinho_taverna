@@ -1,6 +1,5 @@
-import 'package:sqflite/sqflite.dart';
+import 'package:sqflite/sqflite.dart' show Sqflite, ConflictAlgorithm;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:path/path.dart';
 import 'dart:io' show Platform, File;
 import 'package:flutter/foundation.dart';
 import '../models/user.dart';
@@ -33,11 +32,13 @@ class DatabaseService {
 
   Future<Database> _initDatabase() async {
     final dbPath = await getDatabasesPath();
-    final path = join(dbPath, _dbName);
+    final path = dbPath.endsWith(Platform.pathSeparator)
+      ? '${dbPath}$_dbName'
+      : '$dbPath${Platform.pathSeparator}$_dbName';
 
     return await openDatabase(
       path,
-      version: 7, // Incrementado para adicionar coluna email
+      version: 14, // v14: coluna image_url
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -46,7 +47,9 @@ class DatabaseService {
   /// Apaga todos os arquivos do banco (db, wal, shm) e fecha a conexão atual.
   Future<void> deleteLocalDatabase() async {
     final dbPath = await getDatabasesPath();
-    final path = join(dbPath, _dbName);
+    final path = dbPath.endsWith(Platform.pathSeparator)
+        ? '${dbPath}$_dbName'
+        : '$dbPath${Platform.pathSeparator}$_dbName';
 
     // Fechar conexão aberta antes de apagar
     if (_database != null) {
@@ -167,6 +170,118 @@ class DatabaseService {
         print('⚠️ Erro ao adicionar coluna email: $e');
       }
     }
+    
+    if (oldVersion < 8) {
+      // Adicionar coluna is_from_adega à tabela wines
+      try {
+        await db.execute('ALTER TABLE wines ADD COLUMN is_from_adega INTEGER NOT NULL DEFAULT 0');
+        print('✓ Coluna is_from_adega adicionada à tabela wines');
+      } catch (e) {
+        print('⚠️ Erro ao adicionar coluna is_from_adega: $e');
+      }
+    }
+
+    if (oldVersion < 9) {
+      // Criar tabela específica para vinhos da adega (v9)
+      await db.execute('''
+        CREATE TABLE adega (
+          id TEXT PRIMARY KEY,
+          user_id INTEGER NOT NULL,
+          name TEXT NOT NULL,
+          price REAL NOT NULL,
+          description TEXT NOT NULL,
+          image_path TEXT,
+          region TEXT NOT NULL,
+          wine_type TEXT NOT NULL,
+          quantity INTEGER NOT NULL DEFAULT 0,
+          location TEXT,
+          synced INTEGER NOT NULL DEFAULT 0,
+          last_modified TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+        )
+      ''');
+      await db.execute('CREATE INDEX idx_adega_user_id ON adega(user_id)');
+      print('✓ Tabela adega criada (v9)');
+    }
+
+    if (oldVersion < 10) {
+      // Adicionar coluna is_from_adega à tabela adega (v10)
+      try {
+        await db.execute('ALTER TABLE adega ADD COLUMN is_from_adega INTEGER NOT NULL DEFAULT 1');
+        print('✓ Coluna is_from_adega adicionada à tabela adega');
+      } catch (e) {
+        print('⚠️ Erro ao adicionar is_from_adega na adega: $e');
+      }
+    }
+
+    if (oldVersion < 11) {
+      // Adicionar colunas is_house_wine e is_daily_special (v11)
+      try {
+        await db.execute('ALTER TABLE wines ADD COLUMN is_house_wine INTEGER NOT NULL DEFAULT 0');
+        print('✓ Coluna is_house_wine adicionada à tabela wines');
+      } catch (e) {
+        print('⚠️ Erro ao adicionar is_house_wine: $e');
+      }
+      
+      try {
+        await db.execute('ALTER TABLE wines ADD COLUMN is_daily_special INTEGER NOT NULL DEFAULT 0');
+        print('✓ Coluna is_daily_special adicionada à tabela wines');
+      } catch (e) {
+        print('⚠️ Erro ao adicionar is_daily_special: $e');
+      }
+    }
+
+    if (oldVersion < 12) {
+      // Adicionar colunas is_house_wine e is_daily_special na tabela adega (v12)
+      try {
+        await db.execute('ALTER TABLE adega ADD COLUMN is_house_wine INTEGER NOT NULL DEFAULT 0');
+        print('✓ Coluna is_house_wine adicionada à tabela adega');
+      } catch (e) {
+        print('⚠️ Erro ao adicionar is_house_wine na adega: $e');
+      }
+
+      try {
+        await db.execute('ALTER TABLE adega ADD COLUMN is_daily_special INTEGER NOT NULL DEFAULT 0');
+        print('✓ Coluna is_daily_special adicionada à tabela adega');
+      } catch (e) {
+        print('⚠️ Erro ao adicionar is_daily_special na adega: $e');
+      }
+    }
+
+    if (oldVersion < 13) {
+      // Adicionar coluna harvest_year nas tabelas wines e adega (v13)
+      try {
+        await db.execute('ALTER TABLE wines ADD COLUMN harvest_year INTEGER');
+        print('✓ Coluna harvest_year adicionada à tabela wines');
+      } catch (e) {
+        print('⚠️ Erro ao adicionar harvest_year na wines: $e');
+      }
+
+      try {
+        await db.execute('ALTER TABLE adega ADD COLUMN harvest_year INTEGER');
+        print('✓ Coluna harvest_year adicionada à tabela adega');
+      } catch (e) {
+        print('⚠️ Erro ao adicionar harvest_year na adega: $e');
+      }
+    }
+
+    if (oldVersion < 14) {
+      // Adicionar coluna image_url nas tabelas wines e adega (v14)
+      try {
+        await db.execute('ALTER TABLE wines ADD COLUMN image_url TEXT');
+        print('✓ Coluna image_url adicionada à tabela wines');
+      } catch (e) {
+        print('⚠️ Erro ao adicionar image_url na wines: $e');
+      }
+
+      try {
+        await db.execute('ALTER TABLE adega ADD COLUMN image_url TEXT');
+        print('✓ Coluna image_url adicionada à tabela adega');
+      } catch (e) {
+        print('⚠️ Erro ao adicionar image_url na adega: $e');
+      }
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -191,11 +306,16 @@ class DatabaseService {
         price REAL NOT NULL,
         description TEXT NOT NULL,
         image_path TEXT,
+        image_url TEXT,
         region TEXT NOT NULL,
         wine_type TEXT NOT NULL,
         quantity INTEGER NOT NULL DEFAULT 0,
         location TEXT,
+        harvest_year INTEGER,
         synced INTEGER NOT NULL DEFAULT 0,
+        is_from_adega INTEGER NOT NULL DEFAULT 0,
+        is_house_wine INTEGER NOT NULL DEFAULT 0,
+        is_daily_special INTEGER NOT NULL DEFAULT 0,
         last_modified TEXT NOT NULL,
         created_at TEXT NOT NULL,
         FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
@@ -204,6 +324,32 @@ class DatabaseService {
 
     // Índice para melhorar performance
     await db.execute('CREATE INDEX idx_wines_user_id ON wines(user_id)');
+    
+    // Tabela de vinhos da adega (coleção separada)
+    await db.execute('''
+      CREATE TABLE adega (
+        id TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        price REAL NOT NULL,
+        description TEXT NOT NULL,
+        image_path TEXT,
+        image_url TEXT,
+        region TEXT NOT NULL,
+        wine_type TEXT NOT NULL,
+        quantity INTEGER NOT NULL DEFAULT 0,
+        location TEXT,
+        harvest_year INTEGER,
+        is_from_adega INTEGER NOT NULL DEFAULT 1,
+        is_house_wine INTEGER NOT NULL DEFAULT 0,
+        is_daily_special INTEGER NOT NULL DEFAULT 0,
+        synced INTEGER NOT NULL DEFAULT 0,
+        last_modified TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+      )
+    ''');
+    await db.execute('CREATE INDEX idx_adega_user_id ON adega(user_id)');
     
     // Tabela de vendas
     await db.execute('''
@@ -299,17 +445,86 @@ class DatabaseService {
     );
   }
 
+  Future<bool> hasAnyWinesForUser(int userId) async {
+    final db = await database;
+    final wineCount = Sqflite.firstIntValue(
+          await db.rawQuery(
+            'SELECT COUNT(*) FROM wines WHERE user_id = ?',
+            [userId],
+          ),
+        ) ??
+        0;
+    if (wineCount > 0) return true;
+
+    final adegaCount = Sqflite.firstIntValue(
+          await db.rawQuery(
+            'SELECT COUNT(*) FROM adega WHERE user_id = ?',
+            [userId],
+          ),
+        ) ??
+        0;
+    return adegaCount > 0;
+  }
+
+  Future<int?> findAlternateUserIdWithWines(int excludeUserId) async {
+    final db = await database;
+    final wineUser = await db.rawQuery(
+      'SELECT user_id FROM wines WHERE user_id != ? LIMIT 1',
+      [excludeUserId],
+    );
+    if (wineUser.isNotEmpty) {
+      return wineUser.first['user_id'] as int?;
+    }
+
+    final adegaUser = await db.rawQuery(
+      'SELECT user_id FROM adega WHERE user_id != ? LIMIT 1',
+      [excludeUserId],
+    );
+    if (adegaUser.isNotEmpty) {
+      return adegaUser.first['user_id'] as int?;
+    }
+
+    return null;
+  }
+
+  Future<void> reassignUserData({required int fromUserId, required int toUserId}) async {
+    final db = await database;
+    await db.update(
+      'wines',
+      {'user_id': toUserId},
+      where: 'user_id = ?',
+      whereArgs: [fromUserId],
+    );
+    await db.update(
+      'adega',
+      {'user_id': toUserId},
+      where: 'user_id = ?',
+      whereArgs: [fromUserId],
+    );
+    await db.update(
+      'sales',
+      {'user_id': toUserId},
+      where: 'user_id = ?',
+      whereArgs: [fromUserId],
+    );
+  }
+
   // ========== VINHOS ==========
 
   Future<int> insertWine(Wine wine, int userId) async {
     final db = await database;
     final data = wine.toMap();
+    final now = DateTime.now().toIso8601String();
     data['user_id'] = userId;
-    data['created_at'] = DateTime.now().toIso8601String();
-    data['synced'] = 0; // Marcar como não sincronizado
-    data['last_modified'] = DateTime.now().toIso8601String();
+    data['created_at'] = data['created_at'] ?? now;
+    data['last_modified'] = data['last_modified'] ?? now;
+    data['synced'] = data['synced'] ?? 0;
     print('📝 Inserindo vinho: ${wine.name} (synced=0)');
-    return await db.insert('wines', data);
+    return await db.insert(
+      'wines',
+      data,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   Future<int> updateWine(Wine wine, int userId) async {
@@ -361,6 +576,80 @@ class DatabaseService {
     return Wine.fromMap(maps.first);
   }
 
+  // ========== ADEGA (VINHOS PESSOAIS) ==========
+
+  Future<int> insertAdegaWine(Wine wine, int userId) async {
+    print('💾 [DatabaseService] insertAdegaWine iniciado');
+    print('📋 [DatabaseService] Wine ID: ${wine.id}, Nome: ${wine.name}, UserId: $userId');
+    final db = await database;
+    print('🗄️ [DatabaseService] Database obtida');
+    final data = wine.toMap();
+    final now = DateTime.now().toIso8601String();
+    data['user_id'] = userId;
+    data['created_at'] = data['created_at'] ?? now;
+    data['last_modified'] = data['last_modified'] ?? now;
+    data['synced'] = data['synced'] ?? 0;
+    print('📝 [DatabaseService] Dados preparados, executando INSERT na tabela adega...');
+    final result = await db.insert(
+      'adega',
+      data,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    print('✅ [DatabaseService] INSERT concluído! Row ID: $result');
+    return result;
+  }
+
+  Future<int> updateAdegaWine(Wine wine, int userId) async {
+    final db = await database;
+    final data = wine.toMap();
+    data['user_id'] = userId;
+    data['synced'] = 0; // Marcar como não sincronizado
+    data['last_modified'] = DateTime.now().toIso8601String();
+    return await db.update(
+      'adega',
+      data,
+      where: 'id = ? AND user_id = ?',
+      whereArgs: [wine.id, userId],
+    );
+  }
+
+  Future<int> deleteAdegaWine(String wineId, int userId) async {
+    final db = await database;
+    return await db.delete(
+      'adega',
+      where: 'id = ? AND user_id = ?',
+      whereArgs: [wineId, userId],
+    );
+  }
+
+  Future<List<Wine>> getAdegaWinesByUser(int userId) async {
+    print('🔍 [DatabaseService] getAdegaWinesByUser iniciado para userId: $userId');
+    final db = await database;
+    print('🗄️ [DatabaseService] Database obtida, executando query...');
+    final maps = await db.query(
+      'adega',
+      where: 'user_id = ?',
+      whereArgs: [userId],
+      orderBy: 'created_at DESC',
+    );
+    print('📊 [DatabaseService] Query retornou ${maps.length} registros');
+
+    final wines = maps.map((map) => Wine.fromMap(map)).toList();
+    print('✅ [DatabaseService] Convertidos em ${wines.length} objetos Wine');
+    return wines;
+  }
+
+  Future<Wine?> getAdegaWineById(String wineId, int userId) async {
+    final db = await database;
+    final maps = await db.query(
+      'adega',
+      where: 'id = ? AND user_id = ?',
+      whereArgs: [wineId, userId],
+    );
+
+    if (maps.isEmpty) return null;
+    return Wine.fromMap(maps.first);
+  }
   // ========== SINCRONIZAÇÃO ==========
 
   Future<List<Wine>> getUnsyncedWines(int userId) async {

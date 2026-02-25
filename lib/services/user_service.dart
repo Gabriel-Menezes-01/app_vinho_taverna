@@ -44,4 +44,14 @@ class UserService {
   Future<String?> getFirebaseUid() async {
     return await _authService.getFirebaseUid();
   }
+
+  // Buscar usuário por email
+  Future<User?> getUserByEmail(String email) async {
+    return await _authService.getUserByEmail(email);
+  }
+
+  // Buscar usuário por username ou email
+  Future<User?> getUserByUsernameOrEmail(String usernameOrEmail) async {
+    return await _authService.getUserByUsernameOrEmail(usernameOrEmail);
+  }
 }

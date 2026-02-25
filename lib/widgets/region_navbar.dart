@@ -4,11 +4,13 @@ import '../models/wine_regions.dart';
 class RegionNavBar extends StatefulWidget {
   final String selectedRegion;
   final ValueChanged<String> onRegionChanged;
+  final double height;
 
   const RegionNavBar({
     super.key,
     required this.selectedRegion,
     required this.onRegionChanged,
+    this.height = 180,
   });
 
   @override
@@ -21,10 +23,20 @@ class _RegionNavBarState extends State<RegionNavBar> {
 
   // Regiões de Portugal
   static const List<String> portugueseRegions = [
-    'Douro (Portugal)',
-    'Alentejo (Portugal)',
-    'Dão (Portugal)',
     'Vinho Verde (Portugal)',
+    'Trás-os-Montes (Portugal)',
+    'Douro (Portugal)',
+    'Távora-Varosa (Portugal)',
+    'Dão (Portugal)',
+    'Bairrada (Portugal)',
+    'Beira Interior (Portugal)',
+    'Lisboa (Portugal)',
+    'Tejo (Portugal)',
+    'Península de Setúbal (Portugal)',
+    'Alentejo (Portugal)',
+    'Algarve (Portugal)',
+    'Madeira (Ilha da Madeira)',
+    'Açores (Ilhas dos Açores)',
   ];
 
   @override
@@ -45,8 +57,9 @@ class _RegionNavBarState extends State<RegionNavBar> {
         _filteredPortugalRegions = portugueseRegions;
       } else {
         _filteredPortugalRegions = portugueseRegions
-            .where((region) =>
-                region.toLowerCase().contains(query.toLowerCase()))
+            .where(
+              (region) => region.toLowerCase().contains(query.toLowerCase()),
+            )
             .toList();
       }
     });
@@ -54,10 +67,7 @@ class _RegionNavBarState extends State<RegionNavBar> {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 180,
-      child: _buildPortugalTab(),
-    );
+    return SizedBox(height: widget.height, child: _buildPortugalTab());
   }
 
   Widget _buildPortugalTab() {
@@ -84,7 +94,9 @@ class _RegionNavBarState extends State<RegionNavBar> {
                 borderRadius: BorderRadius.circular(8),
               ),
               contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12, vertical: 8),
+                horizontal: 12,
+                vertical: 8,
+              ),
               isDense: true,
             ),
             onChanged: _filterPortugalRegions,
@@ -97,18 +109,11 @@ class _RegionNavBarState extends State<RegionNavBar> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        Icons.search_off,
-                        size: 40,
-                        color: Colors.grey[400],
-                      ),
+                      Icon(Icons.search_off, size: 40, color: Colors.grey[400]),
                       const SizedBox(height: 6),
                       Text(
                         'Nenhuma região encontrada',
-                        style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 13,
-                        ),
+                        style: TextStyle(color: Colors.grey[600], fontSize: 13),
                       ),
                     ],
                   ),
@@ -116,12 +121,37 @@ class _RegionNavBarState extends State<RegionNavBar> {
               : ListView.builder(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 12),
-                  itemCount: _filteredPortugalRegions.length + 1,
+                  itemCount: _filteredPortugalRegions.length + 3,
                   itemBuilder: (context, index) {
-                    final isAll = index == 0;
-                    final region = isAll
-                        ? WineRegions.all
-                        : _filteredPortugalRegions[index - 1];
+                    // Botão "Todos"
+                    if (index == 0) {
+                      return _buildRegionCard(
+                        context,
+                        WineRegions.all,
+                        'Todos',
+                        Icons.all_inclusive,
+                      );
+                    }
+                    // Botão "Vinho da Casa"
+                    if (index == 1) {
+                      return _buildRegionCard(
+                        context,
+                        WineRegions.houseWine,
+                        'Vinho da\nCasa',
+                        Icons.home,
+                      );
+                    }
+                    // Botão "Sugestão do Dia"
+                    if (index == 2) {
+                      return _buildRegionCard(
+                        context,
+                        WineRegions.todaySuggestion,
+                        'Sugestão\ndo Dia',
+                        Icons.star,
+                      );
+                    }
+                    // Regiões normais
+                    final region = _filteredPortugalRegions[index - 3];
                     final isSelected = widget.selectedRegion == region;
                     return Padding(
                       padding: const EdgeInsets.only(right: 8),
@@ -129,18 +159,16 @@ class _RegionNavBarState extends State<RegionNavBar> {
                         width: 110,
                         child: Card(
                           color: isSelected
-                              ? Theme.of(context)
-                                  .colorScheme
-                                  .primaryContainer
+                              ? Theme.of(context).colorScheme.primaryContainer
                               : Colors.white,
                           elevation: isSelected ? 3 : 1,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10),
                             side: isSelected
                                 ? BorderSide(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .primary,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.primary,
                                     width: 1.5,
                                   )
                                 : BorderSide.none,
@@ -154,21 +182,17 @@ class _RegionNavBarState extends State<RegionNavBar> {
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Icon(
-                                    isAll ? Icons.all_inclusive : Icons.wine_bar,
+                                    Icons.wine_bar,
                                     size: 26,
                                     color: isSelected
-                                        ? Theme.of(context)
-                                            .colorScheme
-                                            .onPrimaryContainer
-                                        : Theme.of(context)
-                                            .colorScheme
-                                            .primary,
+                                        ? Theme.of(
+                                            context,
+                                          ).colorScheme.onPrimaryContainer
+                                        : Theme.of(context).colorScheme.primary,
                                   ),
                                   const SizedBox(height: 6),
                                   Text(
-                                    isAll
-                                        ? 'Todos'
-                                        : region.replaceAll(' (Portugal)', ''),
+                                    region.replaceAll(' (Portugal)', ''),
                                     textAlign: TextAlign.center,
                                     style: TextStyle(
                                       fontWeight: isSelected
@@ -176,9 +200,9 @@ class _RegionNavBarState extends State<RegionNavBar> {
                                           : FontWeight.w600,
                                       fontSize: 12,
                                       color: isSelected
-                                          ? Theme.of(context)
-                                              .colorScheme
-                                              .onPrimaryContainer
+                                          ? Theme.of(
+                                              context,
+                                            ).colorScheme.onPrimaryContainer
                                           : Colors.black87,
                                     ),
                                   ),
@@ -195,5 +219,67 @@ class _RegionNavBarState extends State<RegionNavBar> {
       ],
     );
   }
-}
 
+  Widget _buildRegionCard(
+    BuildContext context,
+    String region,
+    String label,
+    IconData icon,
+  ) {
+    final isSelected = widget.selectedRegion == region;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: SizedBox(
+        width: 110,
+        child: Card(
+          color: isSelected
+              ? Theme.of(context).colorScheme.primaryContainer
+              : Colors.white,
+          elevation: isSelected ? 3 : 1,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+            side: isSelected
+                ? BorderSide(
+                    color: Theme.of(context).colorScheme.primary,
+                    width: 1.5,
+                  )
+                : BorderSide.none,
+          ),
+          child: InkWell(
+            onTap: () => widget.onRegionChanged(region),
+            borderRadius: BorderRadius.circular(10),
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    icon,
+                    size: 26,
+                    color: isSelected
+                        ? Theme.of(context).colorScheme.onPrimaryContainer
+                        : Theme.of(context).colorScheme.primary,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    label,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontWeight: isSelected
+                          ? FontWeight.bold
+                          : FontWeight.w600,
+                      fontSize: 12,
+                      color: isSelected
+                          ? Theme.of(context).colorScheme.onPrimaryContainer
+                          : Colors.black87,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

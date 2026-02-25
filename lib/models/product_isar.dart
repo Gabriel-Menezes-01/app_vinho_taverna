@@ -28,6 +28,7 @@ class ProductIsar {
   late String region;
   late String wineType;
   late int quantity;
+  String? location; // Localização da adega
   
   /// Timestamp de criação no servidor (ISO 8601)
   @Index()
@@ -65,6 +66,7 @@ class ProductIsar {
     required this.region,
     required this.wineType,
     this.quantity = 0,
+    this.location,
     DateTime? createdAt,
     DateTime? updatedAt,
     this.lastSyncedAt,
@@ -89,6 +91,7 @@ class ProductIsar {
       region: json['region'] as String,
       wineType: json['wineType'] as String,
       quantity: json['quantity'] as int? ?? 0,
+      location: json['location'] as String?,
       createdAt: DateTime.parse(json['createdAt'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String),
       version: json['version'] as int? ?? 1,
@@ -108,6 +111,7 @@ class ProductIsar {
       'region': region,
       'wineType': wineType,
       'quantity': quantity,
+      'location': location,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
       'version': version,
@@ -124,6 +128,7 @@ class ProductIsar {
     region = other.region;
     wineType = other.wineType;
     quantity = other.quantity;
+    location = other.location;
     updatedAt = other.updatedAt;
     version = other.version;
     isDeleted = other.isDeleted;

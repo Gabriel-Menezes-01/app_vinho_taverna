@@ -1,11 +1,12 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import '../models/wine.dart';
 import '../models/sale.dart';
 import '../services/wine_service.dart';
 import '../services/user_service.dart';
 import '../services/database_service.dart';
+import '../widgets/responsive_wine_image.dart';
 import 'add_edit_wine_screen.dart';
+import 'adega_screen.dart';
 
 class WineDetailScreen extends StatefulWidget {
   final Wine wine;
@@ -48,6 +49,9 @@ class _WineDetailScreenState extends State<WineDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final screenSize = MediaQuery.sizeOf(context);
+    final imageHeight = (screenSize.height * 0.35).clamp(200.0, 360.0).toDouble();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Detalhes do Vinho'),
@@ -55,7 +59,7 @@ class _WineDetailScreenState extends State<WineDetailScreen> {
           IconButton(
             icon: const Icon(Icons.edit),
             onPressed: () async {
-              if (widget.userService != null) {
+              if (widget.userService != null && !currentWine.isFromAdega) {
                 final ok = await _requirePasswordConfirmation(context);
                 if (!ok) return;
               }
@@ -65,11 +69,17 @@ class _WineDetailScreenState extends State<WineDetailScreen> {
               final updated = await Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => AddEditWineScreen(
-                    wineService: widget.wineService,
-                    userService: widget.userService!,
-                    wine: currentWine,
-                  ),
+                  builder: (context) => currentWine.isFromAdega
+                      ? AdegaScreen(
+                          wineService: widget.wineService,
+                          userService: widget.userService,
+                          wine: currentWine,
+                        )
+                      : AddEditWineScreen(
+                          wineService: widget.wineService,
+                          userService: widget.userService!,
+                          wine: currentWine,
+                        ),
                 ),
               );
 
@@ -84,38 +94,24 @@ class _WineDetailScreenState extends State<WineDetailScreen> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: EdgeInsets.only(
+            bottom: 24 + MediaQuery.of(context).padding.bottom,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
             // Imagem em destaque
             Hero(
               tag: 'wine_${currentWine.id}',
-              child: Container(
-                width: double.infinity,
-                height: 300,
-                decoration: BoxDecoration(color: Colors.grey[200]),
-                child: currentWine.imagePath != null
-                    ? Image.file(
-                        File(currentWine.imagePath!),
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Center(
-                            child: Icon(
-                              Icons.wine_bar,
-                              size: 100,
-                              color: Colors.grey[400],
-                            ),
-                          );
-                        },
-                      )
-                    : Center(
-                        child: Icon(
-                          Icons.wine_bar,
-                          size: 100,
-                          color: Colors.grey[400],
-                        ),
-                      ),
+              child: ResponsiveWineImage(
+                imagePath: currentWine.imagePath,
+                imageUrl: currentWine.imageUrl,
+                width: screenSize.width,
+                height: imageHeight,
+                fit: BoxFit.contain,
+                enablePreview: true,
               ),
             ),
             // Informações do vinho
@@ -141,36 +137,33 @@ class _WineDetailScreenState extends State<WineDetailScreen> {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  // Preço
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).primaryColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.attach_money,
-                          color: Theme.of(context).primaryColor,
-                          size: 28,
-                        ),
-                        Text(
-                          '€ ${currentWine.price.toStringAsFixed(2)}',
-                          style: TextStyle(
-                            fontSize: 26,
-                            fontWeight: FontWeight.bold,
-                            color: Theme.of(context).primaryColor,
+                  // Preço (não mostrar na Adega Pessoal)
+                  if (!currentWine.isFromAdega) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).primaryColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '€ ${currentWine.price.toStringAsFixed(2)}',
+                            style: TextStyle(
+                              fontSize: 26,
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).primaryColor,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
+                    const SizedBox(height: 16),
+                  ],
                   // Quantidade disponível
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -244,41 +237,64 @@ class _WineDetailScreenState extends State<WineDetailScreen> {
                     'Descrição',
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 16),
                   Text(
                     currentWine.description,
                     style: TextStyle(
                       fontSize: 16,
-                      height: 1.5,
+                      height: 1.65,
                       color: Colors.grey[700],
                     ),
                   ),
                   const SizedBox(height: 24),
-                  // Botão Vendido
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: currentWine.quantity > 0 ? _handleSold : null,
-                      icon: const Icon(Icons.shopping_cart),
-                      label: const Text(
-                        'Vendido',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        backgroundColor: Colors.purple,
-                        foregroundColor: Colors.white,
-                        disabledBackgroundColor: Colors.grey[300],
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                  // Botão Vendido (não mostrar na Adega Pessoal)
+                  if (!currentWine.isFromAdega) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: currentWine.quantity > 0 ? _handleSold : null,
+                        icon: const Icon(Icons.shopping_cart),
+                        label: const Text(
+                          'Vendido',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          backgroundColor: Colors.purple,
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: Colors.grey[300],
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                       ),
                     ),
-                  ),
+                    const SizedBox(height: 12),
+                  ],
+
+                  // Botão Repor (aparece quando esgotado)
+                  if (currentWine.quantity <= 0)
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _showRestockDialog,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text(
+                          'Repor estoque',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          side: const BorderSide(color: Colors.orange),
+                          foregroundColor: Colors.orange[800],
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -292,12 +308,13 @@ class _WineDetailScreenState extends State<WineDetailScreen> {
 
     final passController = TextEditingController();
     String? error;
+    bool obscurePassword = true;
 
     final result = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
+        builder: (context, setDialogState) => AlertDialog(
           scrollable: true,
           title: const Text('Confirmar senha'),
           content: Column(
@@ -310,8 +327,18 @@ class _WineDetailScreenState extends State<WineDetailScreen> {
                 decoration: InputDecoration(
                   labelText: 'Senha',
                   errorText: error,
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      obscurePassword ? Icons.visibility : Icons.visibility_off,
+                    ),
+                    onPressed: () {
+                      setDialogState(() {
+                        obscurePassword = !obscurePassword;
+                      });
+                    },
+                  ),
                 ),
-                obscureText: true,
+                obscureText: obscurePassword,
               ),
             ],
           ),
@@ -322,15 +349,15 @@ class _WineDetailScreenState extends State<WineDetailScreen> {
             ),
             TextButton(
               onPressed: () async {
-                final ok = await widget.userService!.login(
-                  _currentUsername!,
-                  passController.text,
-                );
+                // Buscar usuário do banco
+                final user = await widget.userService!.getUserByUsernameOrEmail(_currentUsername!);
+                
                 if (!context.mounted) return;
-                if (ok) {
+                
+                if (user != null && user.password == passController.text) {
                   Navigator.pop(context, true);
                 } else {
-                  setState(() => error = 'Senha incorreta');
+                  setDialogState(() => error = 'Senha incorreta');
                 }
               },
               child: const Text('Confirmar'),
@@ -380,11 +407,16 @@ class _WineDetailScreenState extends State<WineDetailScreen> {
         price: currentWine.price,
         description: currentWine.description,
         imagePath: currentWine.imagePath,
+          imageUrl: currentWine.imageUrl,
         region: currentWine.region,
         wineType: currentWine.wineType,
         quantity: currentWine.quantity - 1,
+        location: currentWine.location,
+        harvestYear: currentWine.harvestYear,
         synced: false,
+        isFromAdega: currentWine.isFromAdega,
         lastModified: DateTime.now(),
+        createdAt: currentWine.createdAt,
       );
 
       await widget.wineService.updateWine(updatedWine);
@@ -414,6 +446,105 @@ class _WineDetailScreenState extends State<WineDetailScreen> {
       }
     }
   }
+
+  Future<void> _showRestockDialog() async {
+      final controller = TextEditingController(text: '1');
+      final result = await showDialog<int>(
+        context: context,
+        builder: (context) => AlertDialog(
+          scrollable: true,
+          title: const Text('Repor estoque'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: 'Quantidade a adicionar',
+              hintText: 'Ex: 6',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () {
+                final value = int.tryParse(controller.text.trim());
+                if (value == null || value <= 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Informe uma quantidade válida (> 0).'),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                  return;
+                }
+                Navigator.pop(context, value);
+              },
+              child: const Text('Repor'),
+            ),
+          ],
+        ),
+      );
+
+      controller.dispose();
+
+      if (result != null && result > 0) {
+        await _restockWine(result);
+      }
+    }
+
+    Future<void> _restockWine(int quantityToAdd) async {
+      try {
+        final updatedWine = Wine(
+          id: currentWine.id,
+          name: currentWine.name,
+          price: currentWine.price,
+          description: currentWine.description,
+          imagePath: currentWine.imagePath,
+          imageUrl: currentWine.imageUrl,
+          region: currentWine.region,
+          wineType: currentWine.wineType,
+          quantity: currentWine.quantity + quantityToAdd,
+          location: currentWine.location,
+          harvestYear: currentWine.harvestYear,
+          synced: false,
+          isFromAdega: currentWine.isFromAdega,
+          lastModified: DateTime.now(),
+          createdAt: currentWine.createdAt,
+        );
+
+        await widget.wineService.updateWine(updatedWine);
+
+        if (mounted) {
+          setState(() {
+            currentWine = updatedWine;
+          });
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Estoque reposto: +$quantityToAdd garrafas'),
+              backgroundColor: Colors.green,
+            ),
+          );
+
+          // Volta para a tela anterior já atualizada
+          if (Navigator.canPop(context)) {
+            Navigator.pop(context, true);
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Erro ao repor estoque: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
 
   Future<void> _refreshWineData() async {
     try {
@@ -457,7 +588,11 @@ class _WineDetailScreenState extends State<WineDetailScreen> {
     );
 
     if (confirm == true && context.mounted) {
-      await widget.wineService.deleteWine(currentWine.id);
+      if (currentWine.isFromAdega) {
+        await widget.wineService.deleteAdegaWine(currentWine.id);
+      } else {
+        await widget.wineService.deleteWine(currentWine.id);
+      }
       if (context.mounted) {
         Navigator.pop(context);
       }
@@ -468,12 +603,13 @@ class _WineDetailScreenState extends State<WineDetailScreen> {
     final userController = TextEditingController();
     final passController = TextEditingController();
     String? error;
+    bool obscurePassword = true;
 
     final result = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
+        builder: (context, setDialogState) => AlertDialog(
           scrollable: true,
           title: const Text('Login Necessário'),
           content: Column(
@@ -490,8 +626,20 @@ class _WineDetailScreenState extends State<WineDetailScreen> {
               ),
               TextField(
                 controller: passController,
-                decoration: const InputDecoration(labelText: 'Senha'),
-                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: 'Senha',
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      obscurePassword ? Icons.visibility : Icons.visibility_off,
+                    ),
+                    onPressed: () {
+                      setDialogState(() {
+                        obscurePassword = !obscurePassword;
+                      });
+                    },
+                  ),
+                ),
+                obscureText: obscurePassword,
               ),
             ],
           ),
@@ -502,15 +650,15 @@ class _WineDetailScreenState extends State<WineDetailScreen> {
             ),
             TextButton(
               onPressed: () async {
-                final ok = await widget.userService!.login(
-                  userController.text.trim(),
-                  passController.text,
-                );
+                // Buscar usuário do banco
+                final user = await widget.userService!.getUserByUsernameOrEmail(userController.text.trim());
+                
                 if (!context.mounted) return;
-                if (ok) {
+                
+                if (user != null && user.password == passController.text) {
                   Navigator.pop(context, true);
                 } else {
-                  setState(() => error = 'Usuário ou senha inválidos');
+                  setDialogState(() => error = 'Usuário ou senha inválidos');
                 }
               },
               child: const Text('Entrar'),

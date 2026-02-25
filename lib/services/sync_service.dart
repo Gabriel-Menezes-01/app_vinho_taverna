@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/wine.dart';
 import 'database_service.dart';
 
@@ -36,13 +37,21 @@ class SyncService {
   Future<bool> hasInternetConnection() async {
     final connectivityResult = await Connectivity().checkConnectivity();
     return connectivityResult.contains(ConnectivityResult.mobile) ||
-        connectivityResult.contains(ConnectivityResult.wifi);
+      connectivityResult.contains(ConnectivityResult.wifi) ||
+      connectivityResult.contains(ConnectivityResult.ethernet) ||
+      connectivityResult.contains(ConnectivityResult.vpn) ||
+      connectivityResult.contains(ConnectivityResult.other);
   }
 
   // Sincronizar todos os dados
   Future<void> syncAll() async {
     if (!firebaseEnabled || _firestore == null) {
       print('Firebase não habilitado. Sincronização desativada.');
+      return;
+    }
+
+    if (FirebaseAuth.instance.currentUser == null) {
+      print('⚠️ FirebaseAuth sem sessão ativa. Usando apenas dados locais.');
       return;
     }
 
@@ -78,6 +87,10 @@ class SyncService {
   Future<void> uploadUnsyncedWines() async {
     if (!firebaseEnabled || _firestore == null) {
       print('ℹ️ Firebase não habilitado - vinhos salvos apenas localmente');
+      return;
+    }
+    if (FirebaseAuth.instance.currentUser == null) {
+      print('⚠️ FirebaseAuth sem sessão ativa - upload ignorado');
       return;
     }
     if (_currentUserId == null && _firebaseUid == null) {
@@ -189,6 +202,10 @@ class SyncService {
       print('ℹ️ Firebase não habilitado - usando apenas dados locais');
       return;
     }
+    if (FirebaseAuth.instance.currentUser == null) {
+      print('⚠️ FirebaseAuth sem sessão ativa - download ignorado');
+      return;
+    }
     if (_currentUserId == null && _firebaseUid == null) {
       print('⚠️ Usuário não configurado - não é possível baixar vinhos');
       return;
@@ -199,6 +216,10 @@ class SyncService {
       print('⚠️ ID de usuário remoto inválido');
       return;
     }
+
+    final authUid = FirebaseAuth.instance.currentUser?.uid;
+    print('🔐 FirebaseAuth uid atual (sync): ${authUid ?? "NULO"}');
+    print('🔐 UID remoto usado no sync: $remoteUserDoc');
 
     print('📥 Buscando vinhos do Firestore (usuário: $remoteUserDoc)...');
 
@@ -258,6 +279,7 @@ class SyncService {
   // Deletar vinho do servidor
   Future<void> deleteWineFromServer(String wineId) async {
     if (!firebaseEnabled || _firestore == null) return;
+    if (FirebaseAuth.instance.currentUser == null) return;
     if (_currentUserId == null && _firebaseUid == null) return;
 
     final remoteUserDoc = _remoteUserDocId;

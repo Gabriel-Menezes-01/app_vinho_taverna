@@ -40,7 +40,7 @@ dependencies:
   sqflite_common_ffi: ^2.3.1  # Suporte para Windows/Linux
   
   # Firebase Cloud Messaging para sync
-  firebase_messaging: ^15.0.1
+  firebase_messaging: ^16.1.1
   
   # HTTP client para API
   http: ^1.2.0
@@ -55,19 +55,20 @@ dependencies:
   crypto: ^3.0.3
   
   # Formatação de datas
-  intl: ^0.18.1
+  intl: ^0.20.2
   
   # Shared preferences para sessão
   shared_preferences: ^2.2.2
   
   # Firebase para sincronização em nuvem
-  firebase_core: ^3.8.1
-  cloud_firestore: ^5.6.1
-  firebase_auth: ^5.3.5  # Autenticação cross-device
-  firebase_database: ^11.3.3  # Realtime Database
+  firebase_core: ^4.4.0
+  cloud_firestore: ^6.1.2
+  firebase_auth: ^6.1.4  # Autenticação cross-device
+  firebase_database: ^12.1.3  # Realtime Database
+  firebase_storage: ^13.0.6
   
   # Verificação de conectividade
-  connectivity_plus: ^6.1.2
+  connectivity_plus: ^7.0.0
   
   # Geração de UUID
   uuid: ^4.0.0
@@ -76,10 +77,10 @@ dependencies:
   excel: ^4.0.6
   
   # Gerenciamento de permissões
-  permission_handler: ^11.3.0
+  permission_handler: ^12.0.1
   
   # Compartilhar arquivos
-  share_plus: ^10.1.3
+  share_plus: ^12.0.1
   
   # Abrir arquivos
   open_file: ^3.5.4
@@ -90,6 +91,9 @@ dev_dependencies:
   # Gerador de código Isar
   isar_generator: ^3.1.0+1
   build_runner: ^2.4.8
+  
+  # Gerador de ícones do app
+  flutter_launcher_icons: ^0.14.2
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
@@ -136,3 +140,23 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+# Configuração do ícone do app
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/app_icon.png"
+  remove_alpha_ios: true
+  min_sdk_android: 21
+  web:
+    generate: true
+    image_path: "assets/icon/app_icon.png"
+  windows:
+    generate: true
+    image_path: "assets/icon/app_icon.png"
+  macos:
+    generate: true
+    image_path: "assets/icon/app_icon.png"
+  linux:
+    generate: true
+    image_path: "assets/icon/app_icon.png"

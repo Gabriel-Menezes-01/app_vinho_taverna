@@ -32,7 +32,10 @@ class AuthService {
   Future<bool> _hasInternetConnection() async {
     final connectivityResult = await Connectivity().checkConnectivity();
     return connectivityResult.contains(ConnectivityResult.mobile) ||
-        connectivityResult.contains(ConnectivityResult.wifi);
+      connectivityResult.contains(ConnectivityResult.wifi) ||
+      connectivityResult.contains(ConnectivityResult.ethernet) ||
+      connectivityResult.contains(ConnectivityResult.vpn) ||
+      connectivityResult.contains(ConnectivityResult.other);
   }
 
   // Hash de senha usando SHA-256
@@ -75,8 +78,13 @@ class AuthService {
       print('✅ Sessão salva para usuário ID: $userId');
       print('✅ REGISTRO COMPLETO - Usuário pode fazer login!');
 
-      // DEPOIS: Tentar criar no Firebase em background (não bloqueia)
-      _tryCreateFirebaseUser(username, email, password, userId);
+      // DEPOIS: Tentar criar no Firebase
+      // No Windows, aguardar a criação para garantir UID/FirebaseAuth
+      if (Platform.isWindows) {
+        await _tryCreateFirebaseUser(username, email, password, userId);
+      } else {
+        _tryCreateFirebaseUser(username, email, password, userId);
+      }
 
       return true;
     } catch (e) {
@@ -136,6 +144,29 @@ class AuthService {
 
         print('✅ Usuário criado no Firebase Auth: $firebaseUid');
       }
+    } on firebase_auth.FirebaseAuthException catch (e) {
+      if (e.code == 'email-already-in-use') {
+        // Se já existe no Firebase, tente login para obter UID e sincronizar
+        try {
+          print('ℹ️ Email já existe no Firebase. Tentando login para sincronizar...');
+          final credential = await _firebaseAuth!
+              .signInWithEmailAndPassword(email: email, password: password)
+              .timeout(const Duration(seconds: 5));
+
+          final firebaseUid = credential.user?.uid;
+          if (firebaseUid != null) {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString(_firebaseUidKey, firebaseUid);
+            await _dbService.updateUser(localUserId, firebaseUid: firebaseUid);
+            print('✅ UID do Firebase sincronizado após login: $firebaseUid');
+          }
+        } catch (loginError) {
+          print('⚠️ Falha ao fazer login no Firebase: $loginError');
+        }
+        return;
+      }
+      print('⚠️ Erro ao criar no Firebase (usuário já criado localmente): ${e.message ?? e.code}');
+      // Não retornar false - usuário JÁ FOI CRIADO LOCALMENTE
     } catch (e) {
       print('⚠️ Erro ao criar no Firebase (usuário já criado localmente): $e');
       // Não retornar false - usuário JÁ FOI CRIADO LOCALMENTE
@@ -322,6 +353,13 @@ class AuthService {
 
       // VERIFICAÇÃO 3: Se Firebase habilitado, verificar sincronização
       if (firebaseEnabled && _firestore != null && user.firebaseUid != null && user.firebaseUid!.isNotEmpty) {
+        final authUid = _firebaseAuth?.currentUser?.uid;
+        print('🔐 FirebaseAuth uid atual: ${authUid ?? "NULO"}');
+        print('🔐 Firebase UID salvo no usuario: ${user.firebaseUid}');
+        if (authUid == null) {
+          print('⚠️ FirebaseAuth sem sessão ativa, pulando verificação no Firestore');
+          return user;
+        }
         print('☁️ Verificando sincronização no Firebase...');
         try {
           final firebaseDoc = await _firestore!
@@ -369,6 +407,33 @@ class AuthService {
   Future<int?> getCurrentUserId() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getInt(_currentUserKey);
+  }
+
+  // Buscar usuário por email
+  Future<User?> getUserByEmail(String email) async {
+    try {
+      return await _dbService.getUserByEmail(email);
+    } catch (e) {
+      print('❌ Erro ao buscar usuário por email: $e');
+      return null;
+    }
+  }
+
+  // Buscar usuário por username ou email
+  Future<User?> getUserByUsernameOrEmail(String identifier) async {
+    try {
+      // Tentar primeiro por username
+      final userByUsername = await _dbService.getUserByUsername(identifier);
+      if (userByUsername != null) {
+        return userByUsername;
+      }
+      
+      // Tentar por email
+      return await _dbService.getUserByEmail(identifier);
+    } catch (e) {
+      print('❌ Erro ao buscar usuário: $e');
+      return null;
+    }
   }
 
   // Obter UID Firebase atual (ordem de preferência: sessão Auth, SharedPreferences, banco local)
@@ -463,6 +528,11 @@ class AuthService {
       // Garantir usuário local sincronizado com dados do Firebase
       var updatedLocalUser = await _dbService.getUserByEmail(syncedEmail);
       if (updatedLocalUser == null) {
+        // Tentar reaproveitar usuário local por username (caso email esteja vazio em versões antigas)
+        updatedLocalUser = await _dbService.getUserByUsername(syncedUsername);
+      }
+
+      if (updatedLocalUser == null) {
         final userId = await _dbService.createUser(
           syncedUsername,
           syncedEmail,
@@ -484,6 +554,18 @@ class AuthService {
       }
 
       if (updatedLocalUser != null) {
+        final hasLocalWines = await _dbService.hasAnyWinesForUser(updatedLocalUser.id!);
+        if (!hasLocalWines) {
+          final otherUserId = await _dbService.findAlternateUserIdWithWines(updatedLocalUser.id!);
+          if (otherUserId != null) {
+            await _dbService.reassignUserData(
+              fromUserId: otherUserId,
+              toUserId: updatedLocalUser.id!,
+            );
+            print('✅ Vinhos locais migrados para o usuario logado');
+          }
+        }
+
         await _saveSession(updatedLocalUser.id!);
         
         // SINCRONIZAR VINHOS DO FIREBASE para o dispositivo local

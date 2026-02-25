@@ -1,5 +1,8 @@
-import 'dart:io' show Platform;
+import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:firebase_storage/firebase_storage.dart';
+import '../firebase_options.dart';
 import '../models/wine.dart';
 import '../models/user.dart';
 import 'database_service.dart';
@@ -39,6 +42,26 @@ class WineService {
     _firebaseUid = uid;
   }
 
+  bool _canUseFirestore() {
+    if (!firebaseEnabled || _firestore == null) {
+      return false;
+    }
+    final authUid = firebase_auth.FirebaseAuth.instance.currentUser?.uid;
+    if (authUid == null) {
+      return false;
+    }
+    // Garante UID do Firebase mesmo se não foi configurado via UserService
+    _firebaseUid ??= authUid;
+    return true;
+  }
+
+  String _requireFirestoreUid() {
+    if (!_canUseFirestore() || _firebaseUid == null) {
+      throw Exception('Firebase nao disponivel ou usuario nao autenticado');
+    }
+    return _firebaseUid!;
+  }
+
   // Resolver userId: usa id já definido ou busca pelo email
   Future<int> _resolveUserId() async {
     if (_currentUserId != null) return _currentUserId!;
@@ -58,32 +81,187 @@ class WineService {
   Future<void> addWine(Wine wine) async {
     print('🍷 Adicionando vinho: ${wine.name}');
     final userId = await _resolveUserId();
+    final updatedWine = await _ensureImageUploaded(wine, isAdega: false);
     
     // SEMPRE salvar no Firestore (se Firebase está habilitado)
-    if (firebaseEnabled && _firestore != null && _firebaseUid != null) {
+    if (_canUseFirestore()) {
       print('☁️ Salvando direto no Firestore...');
-      await _addWineToFirebase(wine);
+      try {
+        await _addWineToFirebase(updatedWine);
+      } catch (e) {
+        print('⚠️ Erro ao salvar no Firestore: $e');
+        print('📱 Salvando apenas localmente como fallback...');
+        await _dbService.insertWine(updatedWine, userId);
+        print('✅ Vinho salvo localmente');
+      }
     } else {
       // Fallback para SQLite se Firebase não disponível
       print('📱 Firebase não disponível, salvando localmente...');
-      await _dbService.insertWine(wine, userId);
+      await _dbService.insertWine(updatedWine, userId);
       print('✅ Vinho adicionado localmente');
     }
+  }
+
+  // ==================== ADEGA (VINHOS PESSOAIS) ====================
+
+  Future<void> addAdegaWine(Wine wine) async {
+    print('📦 [WineService] addAdegaWine iniciado para: ${wine.name}');
+    final userId = await _resolveUserId();
+    print('👤 [WineService] userId resolvido: $userId');
+    final updatedWine = await _ensureImageUploaded(wine, isAdega: true);
+    print('📸 [WineService] Imagem processada');
+
+    if (firebaseEnabled) {
+      print('☁️ [WineService] Firebase habilitado, tentando salvar no Firestore...');
+      final uid = _requireFirestoreUid();
+      print('🔑 [WineService] Firebase UID: $uid');
+      await _firestore!
+          .collection('users')
+          .doc(uid)
+          .collection('adega')
+          .doc(updatedWine.id)
+          .set(updatedWine.toFirestore(), SetOptions(merge: true))
+          .timeout(const Duration(seconds: 15));
+      print('✅ [WineService] Salvo no Firestore com sucesso!');
+      // Cache local para offline, mas somente apos salvar no Firestore
+      print('💾 [WineService] Salvando cache local...');
+      await _dbService.insertAdegaWine(updatedWine, userId);
+      await _dbService.markWineAsSynced(updatedWine.id, userId);
+      print('✅ [WineService] Cache local salvo!');
+      return;
+    }
+
+    print('💾 [WineService] Firebase desabilitado, salvando apenas localmente...');
+    await _dbService.insertAdegaWine(updatedWine, userId);
+    print('✅ [WineService] Salvo localmente com sucesso!');
+  }
+
+  Future<void> updateAdegaWine(Wine wine) async {
+    final userId = await _resolveUserId();
+    final updatedWine = await _ensureImageUploaded(wine, isAdega: true);
+    if (firebaseEnabled) {
+      final uid = _requireFirestoreUid();
+      await _firestore!
+          .collection('users')
+          .doc(uid)
+          .collection('adega')
+          .doc(updatedWine.id)
+          .update(updatedWine.toFirestore())
+          .timeout(const Duration(seconds: 15));
+      await _dbService.updateAdegaWine(updatedWine, userId);
+      await _dbService.markWineAsSynced(updatedWine.id, userId);
+      return;
+    }
+
+    await _dbService.updateAdegaWine(updatedWine, userId);
+  }
+
+  Future<void> deleteAdegaWine(String id) async {
+    final userId = await _resolveUserId();
+    if (firebaseEnabled) {
+      final uid = _requireFirestoreUid();
+      await _firestore!
+          .collection('users')
+          .doc(uid)
+          .collection('adega')
+          .doc(id)
+          .delete()
+          .timeout(const Duration(seconds: 15));
+      await _dbService.deleteAdegaWine(id, userId);
+      return;
+    }
+
+    await _dbService.deleteAdegaWine(id, userId);
+  }
+
+  Future<List<Wine>> getAdegaWines() async {
+    print('🔍 [WineService] getAdegaWines iniciado');
+    final userId = await _resolveUserId();
+    print('👤 [WineService] userId: $userId');
+    if (firebaseEnabled) {
+      print('☁️ [WineService] Buscando no Firestore...');
+      final uid = _requireFirestoreUid();
+      print('🔑 [WineService] Firebase UID: $uid');
+      final snapshot = await _firestore!
+          .collection('users')
+          .doc(uid)
+          .collection('adega')
+          .get()
+          .timeout(const Duration(seconds: 15));
+      print('📦 [WineService] Documentos retornados do Firestore: ${snapshot.docs.length}');
+      var wines = snapshot.docs
+        .map((doc) => Wine.fromFirestore(doc.data()))
+        .toList();
+
+      // Fallback: dados antigos podem estar em /wines com isFromAdega = true
+      if (wines.isEmpty) {
+        print('⚠️ [WineService] Nenhum vinho na coleção adega, tentando fallback...');
+        final fallbackSnapshot = await _firestore!
+            .collection('users')
+            .doc(uid)
+            .collection('wines')
+            .where('isFromAdega', isEqualTo: true)
+            .get()
+            .timeout(const Duration(seconds: 15));
+
+        final fallbackWines = fallbackSnapshot.docs
+            .map((doc) => Wine.fromFirestore(doc.data()))
+            .toList();
+        print('📦 [WineService] Fallback encontrou: ${fallbackWines.length} vinhos');
+
+        if (fallbackWines.isNotEmpty) {
+          wines = fallbackWines;
+
+          // Migrar para a colecao correta da adega
+          print('🔄 [WineService] Migrando vinhos para coleção adega...');
+          for (final w in fallbackWines) {
+            await _firestore!
+                .collection('users')
+                .doc(uid)
+                .collection('adega')
+                .doc(w.id)
+                .set(w.toFirestore(), SetOptions(merge: true));
+          }
+          print('✅ [WineService] Migração concluída');
+        }
+      }
+
+      // Cache local para offline
+      print('💾 [WineService] Salvando cache local de ${wines.length} vinhos...');
+      for (final w in wines) {
+        await _dbService.insertAdegaWine(w, userId);
+      }
+      print('✅ [WineService] getAdegaWines retornando ${wines.length} vinhos');
+      return wines;
+    }
+
+    print('💾 [WineService] Buscando localmente no SQLite...');
+    final localWines = await _dbService.getAdegaWinesByUser(userId);
+    print('✅ [WineService] getAdegaWines retornando ${localWines.length} vinhos locais');
+    return localWines;
   }
 
   // Atualizar um vinho
   Future<void> updateWine(Wine wine) async {
     print('🍷 Atualizando vinho: ${wine.name}');
     final userId = await _resolveUserId();
+    final updatedWine = await _ensureImageUploaded(wine, isAdega: false);
     
     // SEMPRE atualizar no Firestore (se Firebase está habilitado)
-    if (firebaseEnabled && _firestore != null && _firebaseUid != null) {
+    if (_canUseFirestore()) {
       print('☁️ Atualizando no Firestore...');
-      await _updateWineInFirebase(wine);
+      try {
+        await _updateWineInFirebase(updatedWine);
+      } catch (e) {
+        print('⚠️ Erro ao atualizar no Firestore: $e');
+        print('📱 Atualizando apenas localmente como fallback...');
+        await _dbService.updateWine(updatedWine, userId);
+        print('✅ Vinho atualizado localmente');
+      }
     } else {
       // Fallback para SQLite se Firebase não disponível
       print('📱 Firebase não disponível, atualizando localmente...');
-      await _dbService.updateWine(wine, userId);
+      await _dbService.updateWine(updatedWine, userId);
       print('✅ Vinho atualizado localmente');
     }
   }
@@ -94,9 +272,16 @@ class WineService {
     final userId = await _resolveUserId();
     
     // SEMPRE deletar no Firestore (se Firebase está habilitado)
-    if (firebaseEnabled && _firestore != null && _firebaseUid != null) {
+    if (_canUseFirestore()) {
       print('☁️ Deletando do Firestore...');
-      await _deleteWineFromFirebase(id);
+      try {
+        await _deleteWineFromFirebase(id);
+      } catch (e) {
+        print('⚠️ Erro ao deletar no Firestore: $e');
+        print('📱 Deletando apenas localmente como fallback...');
+        await _dbService.deleteWine(id, userId);
+        print('✅ Vinho deletado localmente');
+      }
     } else {
       // Fallback para SQLite se Firebase não disponível
       print('📱 Firebase não disponível, deletando localmente...');
@@ -116,7 +301,10 @@ class WineService {
     final userId = await _resolveUserId();
     
     // PRIORIDADE: Ler do Firestore
-    if (firebaseEnabled && _firestore != null && _firebaseUid != null) {
+    if (_canUseFirestore()) {
+      final authUid = firebase_auth.FirebaseAuth.instance.currentUser?.uid;
+      print('🔐 FirebaseAuth uid atual: ${authUid ?? "NULO"}');
+      print('🔐 UID configurado no WineService: $_firebaseUid');
       print('☁️ Buscando vinhos no Firestore...');
       try {
         final snapshot = await _firestore!
@@ -136,8 +324,21 @@ class WineService {
         for (var wine in wines) {
           await _dbService.insertWine(wine, userId);
         }
-        
-        return wines;
+
+        // Se o Firestore estiver vazio, usar cache local para nao mostrar lista vazia
+        final localWines = await _dbService.getWinesByUser(userId);
+        if (wines.isEmpty && localWines.isNotEmpty) {
+          return localWines;
+        }
+
+        // Mesclar vinhos locais que ainda nao estao no Firestore
+        final remoteIds = wines.map((w) => w.id).toSet();
+        final merged = [
+          ...wines,
+          ...localWines.where((w) => !remoteIds.contains(w.id)),
+        ];
+
+        return merged;
       } catch (e) {
         print('⚠️ Erro ao ler do Firestore: $e, usando cache local');
         // Fallback para cache local
@@ -148,6 +349,65 @@ class WineService {
       print('📱 Firebase não disponível, usando cache local');
       return await _dbService.getWinesByUser(userId);
     }
+  }
+
+  Future<Wine> _ensureImageUploaded(Wine wine, {required bool isAdega}) async {
+    final uploadedUrl = await uploadImageIfNeeded(
+      imagePath: wine.imagePath,
+      imageUrl: wine.imageUrl,
+      wineId: wine.id,
+      isAdega: isAdega,
+    );
+    if (uploadedUrl != null && uploadedUrl.isNotEmpty) {
+      wine.imageUrl = uploadedUrl;
+    }
+    return wine;
+  }
+
+  Future<String?> uploadImageIfNeeded({
+    required String? imagePath,
+    required String? imageUrl,
+    required String wineId,
+    required bool isAdega,
+  }) async {
+    if (!firebaseEnabled) return imageUrl;
+    final authUid = firebase_auth.FirebaseAuth.instance.currentUser?.uid;
+    if (authUid == null) {
+      print('⚠️ Upload ignorado: usuario nao autenticado');
+      return imageUrl;
+    }
+    _firebaseUid ??= authUid;
+
+    if (imageUrl != null && imageUrl.isNotEmpty) return imageUrl;
+    if (imagePath == null || imagePath.isEmpty) return imageUrl;
+
+    try {
+      final file = File(imagePath);
+      if (!await file.exists()) return imageUrl;
+
+      final folder = isAdega ? 'adega' : 'wines';
+      final ref = FirebaseStorage.instance
+          .ref()
+          .child('users')
+          .child(_firebaseUid!)
+          .child(folder)
+          .child('$wineId.jpg');
+
+      final snapshot = await ref.putFile(
+        file,
+        SettableMetadata(contentType: 'image/jpeg'),
+      );
+      if (snapshot.state == TaskState.success) {
+        return await snapshot.ref.getDownloadURL();
+      }
+      print('⚠️ Upload nao concluido: ${snapshot.state}');
+    } on FirebaseException catch (e) {
+      print('⚠️ Erro ao enviar imagem: ${e.code} - ${e.message}');
+    } catch (e) {
+      print('⚠️ Erro ao enviar imagem: $e');
+    }
+
+    return imageUrl;
   }
 
   // ==================== MÉTODOS PRIVADOS FIREBASE ====================

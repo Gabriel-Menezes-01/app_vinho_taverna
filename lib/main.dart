@@ -109,8 +109,27 @@ class MyApp extends StatelessWidget {
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
             elevation: 2,
-            padding: const EdgeInsets.symmetric(vertical: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            minimumSize: const Size(0, 44),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            minimumSize: const Size(0, 44),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+        ),
+        textButtonTheme: TextButtonThemeData(
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            minimumSize: const Size(0, 40),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+        ),
+        floatingActionButtonTheme: const FloatingActionButtonThemeData(
+          extendedPadding: EdgeInsets.symmetric(horizontal: 16),
         ),
       ),
       home: FutureBuilder<bool>(
@@ -147,14 +166,6 @@ class MyApp extends StatelessWidget {
           return HomeScreen(
             wineService: wineService,
             userService: userService,
-            syncService: syncService,
-            databaseService: databaseService,
-            );
-          }
-
-          return LoginScreen(
-            userService: userService,
-            wineService: wineService,
             syncService: syncService,
             databaseService: databaseService,
           );

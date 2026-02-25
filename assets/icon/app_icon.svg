@@ -1,0 +1,39 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- Fundo -->
+  <rect width="1024" height="1024" fill="#6B2737" rx="200"/>
+  
+  <!-- Garrafa de vinho -->
+  <g transform="translate(312, 150)">
+    <!-- Corpo da garrafa -->
+    <path d="M 100 200 Q 80 220 80 250 L 80 700 Q 80 750 120 750 L 280 750 Q 320 750 320 700 L 320 250 Q 320 220 300 200 Z" 
+          fill="#8B1538" stroke="#FFF" stroke-width="8"/>
+    
+    <!-- Gargalo -->
+    <rect x="150" y="50" width="100" height="150" rx="10" fill="#8B1538" stroke="#FFF" stroke-width="8"/>
+    
+    <!-- Tampa -->
+    <ellipse cx="200" cy="50" rx="55" ry="20" fill="#D4AF37" stroke="#FFF" stroke-width="6"/>
+    
+    <!-- Rótulo -->
+    <rect x="110" y="400" width="180" height="180" rx="15" fill="#F5E6D3" opacity="0.95"/>
+    
+    <!-- Texto no rótulo -->
+    <text x="200" y="470" font-family="serif" font-size="48" font-weight="bold" text-anchor="middle" fill="#6B2737">
+      VT
+    </text>
+    <text x="200" y="520" font-family="serif" font-size="28" text-anchor="middle" fill="#8B1538">
+      TAVERNA
+    </text>
+    
+    <!-- Detalhe de uva no rótulo -->
+    <circle cx="145" cy="545" r="8" fill="#8B1538"/>
+    <circle cx="158" cy="538" r="8" fill="#8B1538"/>
+    <circle cx="171" cy="545" r="8" fill="#8B1538"/>
+    <circle cx="232" cy="545" r="8" fill="#8B1538"/>
+    <circle cx="245" cy="538" r="8" fill="#8B1538"/>
+    <circle cx="258" cy="545" r="8" fill="#8B1538"/>
+  </g>
+  
+  <!-- Sombra decorativa -->
+  <ellipse cx="512" cy="920" rx="250" ry="50" fill="#000" opacity="0.2"/>
+</svg>
