@@ -61,6 +61,7 @@ class _AdegaScreenState extends State<AdegaScreen> {
       _tipoSelecionado = widget.wine!.wineType;
       _regiaoSelecionada = widget.wine!.region;
       _anoController.text = (widget.wine!.harvestYear ?? DateTime.now().year).toString();
+      _quantidadeAdegaController.text = widget.wine!.quantity.toString();
     }
   }
 
@@ -126,6 +127,8 @@ class _AdegaScreenState extends State<AdegaScreen> {
 
       if (_isEditing && widget.wine != null) {
         // Atualizar vinho existente
+        final novaQuantidade = int.tryParse(_quantidadeAdegaController.text.trim()) ?? widget.wine!.quantity;
+        
         final updatedWine = Wine(
           id: widget.wine!.id,
           name: _nomeController.text.trim(),
@@ -133,7 +136,7 @@ class _AdegaScreenState extends State<AdegaScreen> {
           description: _descricaoController.text.trim(),
           region: _regiaoSelecionada,
           wineType: _tipoSelecionado,
-          quantity: widget.wine!.quantity,
+          quantity: novaQuantidade,
           location: _localController.text.trim(),
           imagePath: _imagePath,
           imageUrl: _imageUrl,

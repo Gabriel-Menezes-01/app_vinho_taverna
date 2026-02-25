@@ -382,6 +382,10 @@ class _WineDetailScreenState extends State<WineDetailScreen> {
       return;
     }
 
+    // Mostrar diálogo para selecionar quantidade
+    final result = await _showSaleQuantityDialog();
+    if (result == null || result <= 0) return;
+
     try {
       // Registrar a venda
       if (widget.databaseService != null && widget.userService != null) {
@@ -392,7 +396,7 @@ class _WineDetailScreenState extends State<WineDetailScreen> {
             wineId: currentWine.id,
             wineName: currentWine.name,
             winePrice: currentWine.price,
-            quantity: 1,
+            quantity: result,
             saleDate: DateTime.now(),
             userId: user.id!,
           );
@@ -400,17 +404,17 @@ class _WineDetailScreenState extends State<WineDetailScreen> {
         }
       }
 
-      // Diminuir a quantidade em 1
+      // Diminuir a quantidade pela quantidade vendida
       final updatedWine = Wine(
         id: currentWine.id,
         name: currentWine.name,
         price: currentWine.price,
         description: currentWine.description,
         imagePath: currentWine.imagePath,
-          imageUrl: currentWine.imageUrl,
+        imageUrl: currentWine.imageUrl,
         region: currentWine.region,
         wineType: currentWine.wineType,
-        quantity: currentWine.quantity - 1,
+        quantity: currentWine.quantity - result,
         location: currentWine.location,
         harvestYear: currentWine.harvestYear,
         synced: false,
@@ -429,7 +433,7 @@ class _WineDetailScreenState extends State<WineDetailScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Venda registrada! ${currentWine.quantity} garrafas restantes',
+              'Venda registrada! -$result garrafa(s). ${currentWine.quantity} garrafas restantes',
             ),
             backgroundColor: Colors.green,
           ),
@@ -445,6 +449,74 @@ class _WineDetailScreenState extends State<WineDetailScreen> {
         );
       }
     }
+  }
+
+  Future<int?> _showSaleQuantityDialog() async {
+    final controller = TextEditingController(text: '1');
+    final result = await showDialog<int>(
+      context: context,
+      builder: (context) => AlertDialog(
+        scrollable: true,
+        title: const Text('Quantidade a vender'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Disponível: ${currentWine.quantity} garrafa(s)',
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Colors.grey,
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Quantidade',
+                hintText: 'Ex: 6',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () {
+              final value = int.tryParse(controller.text.trim());
+              if (value == null || value <= 0) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Informe uma quantidade válida (> 0).'),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+                return;
+              }
+              if (value > currentWine.quantity) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Quantidade não pode exceder ${currentWine.quantity} garrafas.'),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+                return;
+              }
+              Navigator.pop(context, value);
+            },
+            child: const Text('Vender'),
+          ),
+        ],
+      ),
+    );
+
+    controller.dispose();
+    return result;
   }
 
   Future<void> _showRestockDialog() async {
