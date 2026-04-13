@@ -38,10 +38,12 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   String _selectedRegion = WineRegions.all;
   String _selectedWineType = 'todos'; // todos, tinto, branco, rosé, verde, espumante, champagne
+  String _searchQuery = '';
   List<Wine> _wines = [];
   bool _loading = true;
   String? _username;
   String? _email;
+  int _loadToken = 0;
 
   @override
   void initState() {
@@ -51,7 +53,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadData() async {
     print('📱 HomeScreen._loadData iniciando...');
+    if (!mounted) return;
     setState(() => _loading = true);
+    final currentLoadToken = ++_loadToken;
 
     try {
       // VERIFICAÇÃO CRÍTICA: Confirmar que usuário ainda existe no banco
@@ -116,10 +120,13 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       }
 
-      final wines = await widget.wineService.getAllWines();
-      print('🍷 Carregados ${wines.length} vinhos');
+      final wines = await widget.wineService.getHomeWines(
+        selectedRegion: _selectedRegion,
+        selectedWineType: _selectedWineType,
+      );
+      print('🍷 Carregados ${wines.length} vinhos para a Home');
 
-      if (mounted) {
+      if (mounted && currentLoadToken == _loadToken) {
         setState(() {
           _username = user.username;
           _email = user.email;
@@ -148,6 +155,35 @@ class _HomeScreenState extends State<HomeScreen> {
           (route) => false,
         );
       }
+    }
+  }
+
+  Future<void> _reloadFilteredWines() async {
+    if (!mounted) return;
+
+    final currentLoadToken = ++_loadToken;
+    setState(() => _loading = true);
+
+    try {
+      final wines = await widget.wineService.getHomeWines(
+        selectedRegion: _selectedRegion,
+        selectedWineType: _selectedWineType,
+      );
+
+      if (!mounted || currentLoadToken != _loadToken) return;
+      setState(() {
+        _wines = wines;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted || currentLoadToken != _loadToken) return;
+      setState(() => _loading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erro ao atualizar vinhos: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -184,6 +220,19 @@ class _HomeScreenState extends State<HomeScreen> {
           .toList();
     }
 
+    final query = _searchQuery.trim().toLowerCase();
+    if (query.isNotEmpty) {
+      filteredWines = filteredWines
+          .where(
+            (wine) =>
+                wine.name.toLowerCase().contains(query) ||
+                wine.description.toLowerCase().contains(query) ||
+                wine.wineType.toLowerCase().contains(query) ||
+                wine.region.toLowerCase().contains(query),
+          )
+          .toList();
+    }
+
     return filteredWines;
   }
 
@@ -212,7 +261,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     ).then((_) {
       // Recarregar vinhos ao voltar da adega
-      _loadData();
+      if (mounted) _loadData();
     });
   }
 
@@ -228,7 +277,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     ).then((_) {
       // Recarregar vinhos ao voltar
-      _loadData();
+      if (mounted) _loadData();
     });
   }
 
@@ -243,7 +292,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
-    _loadData(); // Recarregar ao voltar
+    if (mounted) _loadData(); // Recarregar ao voltar
   }
 
   Future<void> _logout() async {
@@ -362,6 +411,7 @@ class _HomeScreenState extends State<HomeScreen> {
         setState(() {
           _selectedWineType = type;
         });
+        _reloadFilteredWines();
       },
       selectedColor: chipColor,
       backgroundColor: Colors.white,
@@ -379,7 +429,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Cartas de Vinhos'),
+        title: const Text('Carta de Vinhos'),
         elevation: 0,
         actions: [
           PopupMenuButton<String>(
@@ -516,6 +566,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   setState(() {
                     _selectedRegion = region;
                   });
+                  _reloadFilteredWines();
+                },
+                onSearchChanged: (query) {
+                  if (!mounted) return;
+                  setState(() {
+                    _searchQuery = query;
+                  });
                 },
               ),
               // Botões de tipo de vinho
@@ -608,7 +665,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       );
-      _loadData(); // Recarregar após adicionar
+      if (mounted) _loadData(); // Recarregar após adicionar
     }
   }
 
@@ -789,7 +846,8 @@ class _HomeScreenState extends State<HomeScreen> {
             padding: const EdgeInsets.all(16),
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: crossAxisCount,
-              childAspectRatio: 2.5,
+              // Menor proporcao => cards mais altos, evitando overflow vertical.
+              childAspectRatio: 2.0,
               crossAxisSpacing: 16,
               mainAxisSpacing: 16,
             ),
@@ -830,7 +888,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           );
-          _loadData(); // Recarregar após visualizar detalhes
+          if (mounted) _loadData(); // Recarregar após visualizar detalhes
         },
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -894,6 +952,26 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ],
                     ),
+                    if (wine.casta != null && wine.casta!.trim().isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(Icons.local_offer, size: 14, color: Colors.grey[600]),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              wine.casta!,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 6),
                     Row(
                       children: [

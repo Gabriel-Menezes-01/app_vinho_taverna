@@ -1,7 +1,12 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import '../models/wine.dart';
 import '../models/wine_regions.dart';
+import '../services/casta_service.dart';
+import '../services/location_service.dart';
+import '../services/region_service.dart';
 import '../services/wine_service.dart';
 import '../services/user_service.dart';
 import '../widgets/loading_widgets.dart';
@@ -29,12 +34,19 @@ class _AddEditWineScreenState extends State<AddEditWineScreen> {
   final _priceController = TextEditingController();
   final _quantityController = TextEditingController();
   final _descriptionController = TextEditingController();
-  final _locationController = TextEditingController();
 
   List<Wine> _allWines = [];
   Wine? _selectedAdegaWine;
   String? _imagePath;
   String? _imageUrl;
+  final CastaService _castaService = CastaService();
+  final LocationService _locationService = LocationService();
+  final RegionService _regionService = RegionService();
+  List<String> _castas = List<String>.from(CastaService.defaultCastas);
+  List<String> _locations = List<String>.from(LocationService.defaultLocations);
+  List<String> _regions = List<String>.from(WineRegions.regions);
+  final Set<String> _selectedCastas = <String>{};
+  final Set<String> _selectedLocations = <String>{};
   String _selectedWineType = 'tinto';
   String _selectedRegion = 'Outra região';
   bool _isHouseWine = false;
@@ -51,7 +63,20 @@ class _AddEditWineScreenState extends State<AddEditWineScreen> {
       _priceController.text = widget.wine!.price.toString();
       _quantityController.text = widget.wine!.quantity.toString();
       _descriptionController.text = widget.wine!.description;
-      _locationController.text = widget.wine!.location ?? '';
+      final parsed = _parseCastasFromStorage(widget.wine!.casta);
+      _selectedCastas
+        ..clear()
+        ..addAll(parsed);
+      for (final c in parsed) {
+        if (!_castas.contains(c)) _castas.add(c);
+      }
+      final parsedLocations = _parseLocationsFromStorage(widget.wine!.location);
+      _selectedLocations
+        ..clear()
+        ..addAll(parsedLocations);
+      for (final location in parsedLocations) {
+        if (!_locations.contains(location)) _locations.add(location);
+      }
       _imagePath = widget.wine!.imagePath;
       _imageUrl = widget.wine!.imageUrl;
       _selectedWineType = widget.wine!.wineType;
@@ -59,7 +84,47 @@ class _AddEditWineScreenState extends State<AddEditWineScreen> {
       _isHouseWine = widget.wine!.isHouseWine;
       _isDailySpecial = widget.wine!.isDailySpecial;
     }
+    _loadCastasCatalog();
+    _loadLocationsCatalog();
+    _loadRegionsCatalog();
     _carregarSugestoesVinhos();
+  }
+
+  Future<void> _loadCastasCatalog() async {
+    final catalog = await _castaService.getCatalog();
+    if (!mounted) return;
+    setState(() {
+      _castas = List<String>.from(catalog);
+      for (final selected in _selectedCastas) {
+        if (!_castas.contains(selected)) {
+          _castas.add(selected);
+        }
+      }
+    });
+  }
+
+  Future<void> _loadLocationsCatalog() async {
+    final catalog = await _locationService.getCatalog();
+    if (!mounted) return;
+    setState(() {
+      _locations = List<String>.from(catalog);
+      for (final selected in _selectedLocations) {
+        if (!_locations.contains(selected)) {
+          _locations.add(selected);
+        }
+      }
+    });
+  }
+
+  Future<void> _loadRegionsCatalog() async {
+    final catalog = await _regionService.getCatalog();
+    if (!mounted) return;
+    setState(() {
+      _regions = List<String>.from(catalog);
+      if (!_regions.contains(_selectedRegion)) {
+        _regions.add(_selectedRegion);
+      }
+    });
   }
 
   Future<void> _carregarSugestoesVinhos() async {
@@ -91,7 +156,20 @@ class _AddEditWineScreenState extends State<AddEditWineScreen> {
     _priceController.text = wine.price.toString();
     _quantityController.text = wine.quantity.toString();
     _descriptionController.text = wine.description;
-    _locationController.text = wine.location ?? '';
+    final parsed = _parseCastasFromStorage(wine.casta);
+    _selectedCastas
+      ..clear()
+      ..addAll(parsed);
+    for (final c in parsed) {
+      if (!_castas.contains(c)) _castas.add(c);
+    }
+    final parsedLocations = _parseLocationsFromStorage(wine.location);
+    _selectedLocations
+      ..clear()
+      ..addAll(parsedLocations);
+    for (final location in parsedLocations) {
+      if (!_locations.contains(location)) _locations.add(location);
+    }
     _imagePath = wine.imagePath;
     _imageUrl = wine.imageUrl;
     _selectedRegion = wine.region;
@@ -108,26 +186,281 @@ class _AddEditWineScreenState extends State<AddEditWineScreen> {
     _priceController.dispose();
     _quantityController.dispose();
     _descriptionController.dispose();
-    _locationController.dispose();
     super.dispose();
+  }
+
+  List<String> _parseCastasFromStorage(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return const [];
+    return raw
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toSet()
+        .toList();
+  }
+
+  String? _formatCastasForStorage() {
+    if (_selectedCastas.isEmpty) return null;
+    return _selectedCastas.join(', ');
+  }
+
+  List<String> _parseLocationsFromStorage(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return const [];
+    return raw
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toSet()
+        .toList();
+  }
+
+  String? _formatLocationsForStorage() {
+    if (_selectedLocations.isEmpty) return null;
+    return _selectedLocations.join(', ');
+  }
+
+  void _addCustomCasta() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Nova casta'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            hintText: 'Ex: Baga, Encruzado...'
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final value = controller.text.trim();
+              if (value.isEmpty) return;
+
+              await _castaService.addCustomCasta(value);
+              final updatedCatalog = await _castaService.getCatalog();
+              if (!mounted) return;
+
+              setState(() {
+                _castas = List<String>.from(updatedCatalog);
+                _selectedCastas.add(value);
+              });
+              Navigator.pop(context);
+            },
+            child: const Text('Adicionar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _removeCustomCasta(String casta) async {
+    await _castaService.removeCustomCasta(casta);
+    if (!mounted) return;
+
+    setState(() {
+      _castas.removeWhere((c) => c.toLowerCase() == casta.toLowerCase());
+      _selectedCastas.removeWhere((c) => c.toLowerCase() == casta.toLowerCase());
+    });
+  }
+
+  void _addCustomLocation() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Nova localizacao'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            hintText: 'Ex: Prateleira A3, Adega Climatizada...'
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final value = controller.text.trim();
+              if (value.isEmpty) return;
+
+              await _locationService.addCustomLocation(value);
+              final updatedCatalog = await _locationService.getCatalog();
+              if (!mounted) return;
+
+              setState(() {
+                _locations = List<String>.from(updatedCatalog);
+                _selectedLocations.add(value);
+              });
+              Navigator.pop(context);
+            },
+            child: const Text('Adicionar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _removeLocation(String location) async {
+    await _locationService.removeLocation(location);
+    if (!mounted) return;
+
+    setState(() {
+      _locations.removeWhere((c) => c.toLowerCase() == location.toLowerCase());
+      _selectedLocations.removeWhere((c) => c.toLowerCase() == location.toLowerCase());
+    });
+  }
+
+  void _addCustomRegion() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Nova regiao'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            hintText: 'Ex: Ribatejo, Minho, Serra da Estrela...'
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final value = controller.text.trim();
+              if (value.isEmpty) return;
+
+              await _regionService.addCustomRegion(value);
+              await _loadRegionsCatalog();
+              if (!mounted) return;
+
+              setState(() {
+                _selectedRegion = value;
+              });
+              Navigator.pop(context);
+            },
+            child: const Text('Adicionar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _removeSelectedRegion() async {
+    final region = _selectedRegion;
+    if (_regionService.isProtectedRegion(region)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Essa regiao nao pode ser excluida.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    final removed = await _regionService.removeRegion(region);
+    if (!mounted) return;
+
+    if (!removed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nao foi possivel excluir a regiao selecionada.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    await _loadRegionsCatalog();
+    if (!mounted) return;
+
+    setState(() {
+      _selectedRegion = _regions.contains('Outra região')
+          ? 'Outra região'
+          : (_regions.isNotEmpty ? _regions.first : 'Outra região');
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Regiao "$region" excluida da lista.'),
+        backgroundColor: Colors.green,
+      ),
+    );
   }
 
   Future<void> _pickImage(ImageSource source) async {
     try {
+      // No Windows/desktop, câmera não é suportada
+      if ((Platform.isWindows || Platform.isLinux || Platform.isMacOS) &&
+          source == ImageSource.camera) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Câmera não disponível no desktop. Use a Galeria.'),
+            ),
+          );
+        }
+        return;
+      }
+
+      // No desktop, não usar imageQuality pois pode causar problemas
+      final bool isDesktop =
+          Platform.isWindows || Platform.isLinux || Platform.isMacOS;
       final XFile? image = await _picker.pickImage(
         source: source,
-        maxWidth: 1920,
-        maxHeight: 1080,
-        imageQuality: 85,
+        maxWidth: isDesktop ? null : 1920,
+        maxHeight: isDesktop ? null : 1080,
+        imageQuality: isDesktop ? null : 85,
       );
 
       if (image != null) {
+        final dir = await getApplicationDocumentsDirectory();
+        final imagesDir =
+            Directory('${dir.path}${Platform.pathSeparator}wine_images');
+        if (!await imagesDir.exists()) {
+          await imagesDir.create(recursive: true);
+        }
+        // Preservar extensão original do arquivo
+        final originalExt = image.path.contains('.')
+            ? image.path.substring(image.path.lastIndexOf('.'))
+            : '.jpg';
+        final fileName =
+            '${DateTime.now().millisecondsSinceEpoch}$originalExt';
+        final destPath =
+            '${imagesDir.path}${Platform.pathSeparator}$fileName';
+        final savedFile = await File(image.path).copy(destPath);
+        debugPrint('✅ Imagem salva em: ${savedFile.path}');
         setState(() {
-          _imagePath = image.path;
+          _imagePath = savedFile.path;
           _imageUrl = null;
         });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Imagem selecionada com sucesso!'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 1),
+            ),
+          );
+        }
+      } else {
+        debugPrint('ℹ️ Nenhuma imagem selecionada (cancelado pelo usuário)');
       }
     } catch (e) {
+      debugPrint('❌ Erro ao selecionar imagem: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Erro ao selecionar imagem: $e')),
@@ -137,6 +470,13 @@ class _AddEditWineScreenState extends State<AddEditWineScreen> {
   }
 
   void _showImageSourceDialog() {
+    final bool isDesktop =
+        Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+    if (isDesktop) {
+      // No desktop, ir direto para a galeria (câmera não suportada)
+      _pickImage(ImageSource.gallery);
+      return;
+    }
     showModalBottomSheet(
       context: context,
       builder: (context) => SafeArea(
@@ -171,71 +511,70 @@ class _AddEditWineScreenState extends State<AddEditWineScreen> {
 
     setState(() => _saving = true);
 
-    final requestedQuantity = int.tryParse(_quantityController.text.trim()) ?? 0;
-    final shouldDeductAdega = widget.wine == null &&
-        _selectedAdegaWine != null &&
-        _nameController.text.trim() == _selectedAdegaWine!.name &&
-        _selectedRegion == _selectedAdegaWine!.region &&
-        _selectedWineType == _selectedAdegaWine!.wineType;
-
-    final wineId = widget.wine?.id ?? DateTime.now().millisecondsSinceEpoch.toString();
-    final uploadedUrl = await widget.wineService.uploadImageIfNeeded(
-      imagePath: _imagePath,
-      imageUrl: _imageUrl,
-      wineId: wineId,
-      isAdega: false,
-    );
-    if (uploadedUrl != null && uploadedUrl.isNotEmpty) {
-      _imageUrl = uploadedUrl;
-    }
-
-    Wine? currentAdega;
-    if (shouldDeductAdega && requestedQuantity > 0) {
-      final adegaWines = await widget.wineService.getAdegaWines();
-      for (final wine in adegaWines) {
-        if (wine.id == _selectedAdegaWine!.id) {
-          currentAdega = wine;
-          break;
-        }
-      }
-
-      if (currentAdega != null && requestedQuantity > currentAdega.quantity) {
-        if (mounted) {
-          setState(() => _saving = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Quantidade indisponível na adega. Restam ${currentAdega.quantity} garrafas.',
-              ),
-              backgroundColor: Colors.orange,
-            ),
-          );
-        }
-        return;
-      }
-    }
-
-    final wine = Wine(
-      id: wineId,
-      name: _nameController.text.trim(),
-      price: double.parse(_priceController.text.trim()),
-      description: _descriptionController.text.trim(),
-      imagePath: _imagePath,
-      imageUrl: _imageUrl,
-      region: _selectedRegion,
-      wineType: _selectedWineType,
-      quantity: requestedQuantity,
-      location: _locationController.text.trim().isEmpty ? null : _locationController.text.trim(),
-      harvestYear: widget.wine?.harvestYear,
-      isHouseWine: _isHouseWine,
-      isDailySpecial: _isDailySpecial,
-    );
-
     try {
+      final requestedQuantity = int.tryParse(_quantityController.text.trim()) ?? 0;
+      final shouldDeductAdega = widget.wine == null &&
+          _selectedAdegaWine != null &&
+          _nameController.text.trim() == _selectedAdegaWine!.name &&
+          _selectedRegion == _selectedAdegaWine!.region &&
+          _selectedWineType == _selectedAdegaWine!.wineType;
+
+      final wineId = widget.wine?.id ?? DateTime.now().millisecondsSinceEpoch.toString();
+      final uploadedUrl = await widget.wineService.uploadImageIfNeeded(
+        imagePath: _imagePath,
+        imageUrl: _imageUrl,
+        wineId: wineId,
+        isAdega: false,
+      );
+      if (uploadedUrl != null && uploadedUrl.isNotEmpty) {
+        _imageUrl = uploadedUrl;
+      }
+
+      Wine? currentAdega;
+      if (shouldDeductAdega && requestedQuantity > 0) {
+        final adegaWines = await widget.wineService.getAdegaWines();
+        for (final wine in adegaWines) {
+          if (wine.id == _selectedAdegaWine!.id) {
+            currentAdega = wine;
+            break;
+          }
+        }
+
+        if (currentAdega != null && requestedQuantity > currentAdega.quantity) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Quantidade indisponível na adega. Restam ${currentAdega.quantity} garrafas.',
+                ),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+          return;
+        }
+      }
+
+      final wine = Wine(
+        id: wineId,
+        name: _nameController.text.trim(),
+        price: double.parse(_priceController.text.trim()),
+        description: _descriptionController.text.trim(),
+        casta: _formatCastasForStorage(),
+        imagePath: _imagePath,
+        imageUrl: _imageUrl,
+        region: _selectedRegion,
+        wineType: _selectedWineType,
+        quantity: requestedQuantity,
+        location: _formatLocationsForStorage(),
+        harvestYear: widget.wine?.harvestYear,
+        isHouseWine: _isHouseWine,
+        isDailySpecial: _isDailySpecial,
+      );
+
       if (widget.wine != null) {
         await widget.wineService.updateWine(wine);
         if (mounted) {
-          setState(() => _saving = false);
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Vinho atualizado com sucesso!'),
@@ -253,6 +592,7 @@ class _AddEditWineScreenState extends State<AddEditWineScreen> {
             name: currentAdega.name,
             price: currentAdega.price,
             description: currentAdega.description,
+            casta: currentAdega.casta,
             imagePath: currentAdega.imagePath,
             imageUrl: currentAdega.imageUrl,
             region: currentAdega.region,
@@ -277,10 +617,11 @@ class _AddEditWineScreenState extends State<AddEditWineScreen> {
           _priceController.clear();
           _quantityController.clear();
           _descriptionController.clear();
-          _locationController.clear();
           setState(() {
             _imagePath = null;
             _imageUrl = null;
+            _selectedCastas.clear();
+            _selectedLocations.clear();
             _selectedWineType = 'tinto';
             _selectedRegion = 'Outra região';
             _isHouseWine = false;
@@ -300,13 +641,16 @@ class _AddEditWineScreenState extends State<AddEditWineScreen> {
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _saving = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Erro ao salvar vinho: $e'),
             backgroundColor: Colors.red,
           ),
         );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _saving = false);
       }
     }
   }
@@ -541,17 +885,87 @@ class _AddEditWineScreenState extends State<AddEditWineScreen> {
           ),
           const SizedBox(height: 16),
 
-          // Localização
-          TextFormField(
-            controller: _locationController,
-            decoration: InputDecoration(
-              labelText: 'Localização (opcional)',
-              hintText: 'Ex: Prateleira A3, Adega 2, Armário...',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+          // Casta
+          const Text(
+            'Casta (opcional)',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ActionChip(
+                avatar: const Icon(Icons.add, size: 18),
+                label: const Text('Nova casta'),
+                onPressed: _addCustomCasta,
               ),
-              prefixIcon: const Icon(Icons.location_on),
-            ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final casta in _castas)
+                InputChip(
+                  label: Text(casta),
+                  selected: _selectedCastas.contains(casta),
+                  onSelected: (selected) {
+                    setState(() {
+                      if (selected) {
+                        _selectedCastas.add(casta);
+                      } else {
+                        _selectedCastas.remove(casta);
+                      }
+                    });
+                  },
+                  onDeleted: _castaService.isDefaultCasta(casta)
+                      ? null
+                      : () => _removeCustomCasta(casta),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Localizacao
+          const Text(
+            'Localizacao (opcional)',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ActionChip(
+                avatar: const Icon(Icons.add_location_alt, size: 18),
+                label: const Text('Nova localizacao'),
+                onPressed: _addCustomLocation,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final location in _locations)
+                InputChip(
+                  label: Text(location),
+                  selected: _selectedLocations.contains(location),
+                  onSelected: (selected) {
+                    setState(() {
+                      if (selected) {
+                        _selectedLocations.add(location);
+                      } else {
+                        _selectedLocations.remove(location);
+                      }
+                    });
+                  },
+                  onDeleted: () => _removeLocation(location),
+                ),
+            ],
           ),
           const SizedBox(height: 24),
 
@@ -585,7 +999,7 @@ class _AddEditWineScreenState extends State<AddEditWineScreen> {
               ),
               prefixIcon: const Icon(Icons.public),
             ),
-            items: WineRegions.regions.map((region) {
+            items: _regions.map((region) {
               return DropdownMenuItem(
                 value: region,
                 child: Text(region),
@@ -596,6 +1010,23 @@ class _AddEditWineScreenState extends State<AddEditWineScreen> {
                 setState(() => _selectedRegion = value);
               }
             },
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ActionChip(
+                avatar: const Icon(Icons.add, size: 18),
+                label: const Text('Nova regiao'),
+                onPressed: _addCustomRegion,
+              ),
+              ActionChip(
+                avatar: const Icon(Icons.delete_outline, size: 18),
+                label: const Text('Excluir regiao selecionada'),
+                onPressed: _removeSelectedRegion,
+              ),
+            ],
           ),
           const SizedBox(height: 24),
 

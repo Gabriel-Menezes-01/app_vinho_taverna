@@ -4,12 +4,14 @@ import '../models/wine_regions.dart';
 class RegionNavBar extends StatefulWidget {
   final String selectedRegion;
   final ValueChanged<String> onRegionChanged;
+  final ValueChanged<String>? onSearchChanged;
   final double height;
 
   const RegionNavBar({
     super.key,
     required this.selectedRegion,
     required this.onRegionChanged,
+    this.onSearchChanged,
     this.height = 180,
   });
 
@@ -52,6 +54,7 @@ class _RegionNavBarState extends State<RegionNavBar> {
   }
 
   void _filterPortugalRegions(String query) {
+    widget.onSearchChanged?.call(query);
     setState(() {
       if (query.isEmpty) {
         _filteredPortugalRegions = portugueseRegions;
@@ -71,6 +74,8 @@ class _RegionNavBarState extends State<RegionNavBar> {
   }
 
   Widget _buildPortugalTab() {
+    final displayedRegions = _filteredPortugalRegions;
+
     return Column(
       children: [
         // Campo de busca
@@ -102,26 +107,13 @@ class _RegionNavBarState extends State<RegionNavBar> {
             onChanged: _filterPortugalRegions,
           ),
         ),
+        
         // Lista horizontal de regiões de Portugal
         Expanded(
-          child: _filteredPortugalRegions.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.search_off, size: 40, color: Colors.grey[400]),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Nenhuma região encontrada',
-                        style: TextStyle(color: Colors.grey[600], fontSize: 13),
-                      ),
-                    ],
-                  ),
-                )
-              : ListView.builder(
+          child: ListView.builder(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 12),
-                  itemCount: _filteredPortugalRegions.length + 3,
+                  itemCount: displayedRegions.length + 3,
                   itemBuilder: (context, index) {
                     // Botão "Todos"
                     if (index == 0) {
@@ -151,7 +143,7 @@ class _RegionNavBarState extends State<RegionNavBar> {
                       );
                     }
                     // Regiões normais
-                    final region = _filteredPortugalRegions[index - 3];
+                    final region = displayedRegions[index - 3];
                     final isSelected = widget.selectedRegion == region;
                     return Padding(
                       padding: const EdgeInsets.only(right: 8),

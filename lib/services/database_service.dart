@@ -1,4 +1,4 @@
-import 'package:sqflite/sqflite.dart' show Sqflite, ConflictAlgorithm;
+import 'package:sqflite/sqflite.dart' show Sqflite, ConflictAlgorithm, DatabaseException;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'dart:io' show Platform, File;
 import 'package:flutter/foundation.dart';
@@ -36,12 +36,38 @@ class DatabaseService {
       ? '${dbPath}$_dbName'
       : '$dbPath${Platform.pathSeparator}$_dbName';
 
-    return await openDatabase(
+    final db = await openDatabase(
       path,
-      version: 14, // v14: coluna image_url
+      version: 15, // v15: coluna casta
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
+
+    await _ensureSchemaCompatibility(db);
+    return db;
+  }
+
+  Future<void> _ensureSchemaCompatibility(Database db) async {
+    await _ensureColumnExists(db, table: 'wines', column: 'casta', definition: 'TEXT');
+    await _ensureColumnExists(db, table: 'adega', column: 'casta', definition: 'TEXT');
+  }
+
+  Future<void> _ensureColumnExists(
+    Database db, {
+    required String table,
+    required String column,
+    required String definition,
+  }) async {
+    final columns = await db.rawQuery('PRAGMA table_info(' + table + ')');
+    final exists = columns.any((entry) => entry['name'] == column);
+    if (exists) return;
+
+    try {
+      await db.execute('ALTER TABLE ' + table + ' ADD COLUMN ' + column + ' ' + definition);
+      debugPrint('✓ Coluna ' + column + ' garantida na tabela ' + table);
+    } catch (e) {
+      debugPrint('⚠️ Falha ao garantir coluna ' + column + ' na tabela ' + table + ': $e');
+    }
   }
 
   /// Apaga todos os arquivos do banco (db, wal, shm) e fecha a conexão atual.
@@ -282,6 +308,23 @@ class DatabaseService {
         print('⚠️ Erro ao adicionar image_url na adega: $e');
       }
     }
+
+    if (oldVersion < 15) {
+      // Adicionar coluna casta nas tabelas wines e adega (v15)
+      try {
+        await db.execute('ALTER TABLE wines ADD COLUMN casta TEXT');
+        print('✓ Coluna casta adicionada à tabela wines');
+      } catch (e) {
+        print('⚠️ Erro ao adicionar casta na wines: $e');
+      }
+
+      try {
+        await db.execute('ALTER TABLE adega ADD COLUMN casta TEXT');
+        print('✓ Coluna casta adicionada à tabela adega');
+      } catch (e) {
+        print('⚠️ Erro ao adicionar casta na adega: $e');
+      }
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -305,6 +348,7 @@ class DatabaseService {
         name TEXT NOT NULL,
         price REAL NOT NULL,
         description TEXT NOT NULL,
+        casta TEXT,
         image_path TEXT,
         image_url TEXT,
         region TEXT NOT NULL,
@@ -333,6 +377,7 @@ class DatabaseService {
         name TEXT NOT NULL,
         price REAL NOT NULL,
         description TEXT NOT NULL,
+        casta TEXT,
         image_path TEXT,
         image_url TEXT,
         region TEXT NOT NULL,
@@ -513,6 +558,7 @@ class DatabaseService {
 
   Future<int> insertWine(Wine wine, int userId) async {
     final db = await database;
+    await _ensureSchemaCompatibility(db);
     final data = wine.toMap();
     final now = DateTime.now().toIso8601String();
     data['user_id'] = userId;
@@ -520,26 +566,52 @@ class DatabaseService {
     data['last_modified'] = data['last_modified'] ?? now;
     data['synced'] = data['synced'] ?? 0;
     print('📝 Inserindo vinho: ${wine.name} (synced=0)');
-    return await db.insert(
-      'wines',
-      data,
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    try {
+      return await db.insert(
+        'wines',
+        data,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } on DatabaseException catch (e) {
+      if (_isMissingCastaColumnError(e)) {
+        await _ensureColumnExists(db, table: 'wines', column: 'casta', definition: 'TEXT');
+        return await db.insert(
+          'wines',
+          data,
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+      rethrow;
+    }
   }
 
   Future<int> updateWine(Wine wine, int userId) async {
     final db = await database;
+    await _ensureSchemaCompatibility(db);
     final data = wine.toMap();
     data['user_id'] = userId;
     data['synced'] = 0; // Marcar como não sincronizado
     data['last_modified'] = DateTime.now().toIso8601String();
     print('📝 Atualizando vinho: ${wine.name} (synced=0)');
-    return await db.update(
-      'wines',
-      data,
-      where: 'id = ? AND user_id = ?',
-      whereArgs: [wine.id, userId],
-    );
+    try {
+      return await db.update(
+        'wines',
+        data,
+        where: 'id = ? AND user_id = ?',
+        whereArgs: [wine.id, userId],
+      );
+    } on DatabaseException catch (e) {
+      if (_isMissingCastaColumnError(e)) {
+        await _ensureColumnExists(db, table: 'wines', column: 'casta', definition: 'TEXT');
+        return await db.update(
+          'wines',
+          data,
+          where: 'id = ? AND user_id = ?',
+          whereArgs: [wine.id, userId],
+        );
+      }
+      rethrow;
+    }
   }
 
   Future<int> deleteWine(String wineId, int userId) async {
@@ -558,6 +630,59 @@ class DatabaseService {
       where: 'user_id = ?',
       whereArgs: [userId],
       orderBy: 'created_at DESC',
+    );
+
+    return maps.map((map) => Wine.fromMap(map)).toList();
+  }
+
+  Future<List<Wine>> getWinesForScreen(
+    int userId, {
+    bool excludeAdega = true,
+    bool onlyAvailable = false,
+    bool onlySoldOut = false,
+    String? region,
+    String? wineType,
+    bool? isDailySpecial,
+    double? maxPrice,
+    int? limit,
+  }) async {
+    final db = await database;
+
+    final whereClauses = <String>['user_id = ?'];
+    final whereArgs = <Object?>[userId];
+
+    if (excludeAdega) {
+      whereClauses.add('is_from_adega = 0');
+    }
+    if (onlyAvailable) {
+      whereClauses.add('quantity > 0');
+    }
+    if (onlySoldOut) {
+      whereClauses.add('quantity = 0');
+    }
+    if (region != null && region.trim().isNotEmpty) {
+      whereClauses.add('region = ?');
+      whereArgs.add(region.trim());
+    }
+    if (wineType != null && wineType.trim().isNotEmpty) {
+      whereClauses.add('wine_type = ?');
+      whereArgs.add(wineType.trim());
+    }
+    if (isDailySpecial != null) {
+      whereClauses.add('is_daily_special = ?');
+      whereArgs.add(isDailySpecial ? 1 : 0);
+    }
+    if (maxPrice != null) {
+      whereClauses.add('price <= ?');
+      whereArgs.add(maxPrice);
+    }
+
+    final maps = await db.query(
+      'wines',
+      where: whereClauses.join(' AND '),
+      whereArgs: whereArgs,
+      orderBy: 'created_at DESC',
+      limit: limit,
     );
 
     return maps.map((map) => Wine.fromMap(map)).toList();
@@ -582,6 +707,7 @@ class DatabaseService {
     print('💾 [DatabaseService] insertAdegaWine iniciado');
     print('📋 [DatabaseService] Wine ID: ${wine.id}, Nome: ${wine.name}, UserId: $userId');
     final db = await database;
+    await _ensureSchemaCompatibility(db);
     print('🗄️ [DatabaseService] Database obtida');
     final data = wine.toMap();
     final now = DateTime.now().toIso8601String();
@@ -590,27 +716,60 @@ class DatabaseService {
     data['last_modified'] = data['last_modified'] ?? now;
     data['synced'] = data['synced'] ?? 0;
     print('📝 [DatabaseService] Dados preparados, executando INSERT na tabela adega...');
-    final result = await db.insert(
-      'adega',
-      data,
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    int result;
+    try {
+      result = await db.insert(
+        'adega',
+        data,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } on DatabaseException catch (e) {
+      if (_isMissingCastaColumnError(e)) {
+        await _ensureColumnExists(db, table: 'adega', column: 'casta', definition: 'TEXT');
+        result = await db.insert(
+          'adega',
+          data,
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      } else {
+        rethrow;
+      }
+    }
     print('✅ [DatabaseService] INSERT concluído! Row ID: $result');
     return result;
   }
 
   Future<int> updateAdegaWine(Wine wine, int userId) async {
     final db = await database;
+    await _ensureSchemaCompatibility(db);
     final data = wine.toMap();
     data['user_id'] = userId;
     data['synced'] = 0; // Marcar como não sincronizado
     data['last_modified'] = DateTime.now().toIso8601String();
-    return await db.update(
-      'adega',
-      data,
-      where: 'id = ? AND user_id = ?',
-      whereArgs: [wine.id, userId],
-    );
+    try {
+      return await db.update(
+        'adega',
+        data,
+        where: 'id = ? AND user_id = ?',
+        whereArgs: [wine.id, userId],
+      );
+    } on DatabaseException catch (e) {
+      if (_isMissingCastaColumnError(e)) {
+        await _ensureColumnExists(db, table: 'adega', column: 'casta', definition: 'TEXT');
+        return await db.update(
+          'adega',
+          data,
+          where: 'id = ? AND user_id = ?',
+          whereArgs: [wine.id, userId],
+        );
+      }
+      rethrow;
+    }
+  }
+
+  bool _isMissingCastaColumnError(DatabaseException e) {
+    final msg = e.toString().toLowerCase();
+    return msg.contains('no such column: casta') || msg.contains('has no column named casta');
   }
 
   Future<int> deleteAdegaWine(String wineId, int userId) async {

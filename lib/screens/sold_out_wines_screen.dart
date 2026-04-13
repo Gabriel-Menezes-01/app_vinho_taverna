@@ -39,8 +39,7 @@ class _SoldOutWinesScreenState extends State<SoldOutWinesScreen> {
     try {
       final user = await widget.userService.getUserAsync();
       if (user != null) {
-        final wines = await widget.wineService.getAllWines();
-        final soldOutWines = wines.where((wine) => wine.quantity == 0).toList();
+        final soldOutWines = await widget.wineService.getSoldOutWines();
 
         setState(() {
           _wines = soldOutWines;
@@ -236,6 +235,15 @@ class _SoldOutWinesScreenState extends State<SoldOutWinesScreen> {
                       '${wine.region} • ${wine.wineType}',
                       style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                     ),
+                    if (wine.casta != null && wine.casta!.trim().isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        'Casta: ${wine.casta!}',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     Align(
                       alignment: Alignment.centerLeft,
@@ -305,6 +313,7 @@ class _SoldOutWinesScreenState extends State<SoldOutWinesScreen> {
         name: wine.name,
         price: wine.price,
         description: wine.description,
+        casta: wine.casta,
         imagePath: wine.imagePath,
         imageUrl: wine.imageUrl,
         region: wine.region,

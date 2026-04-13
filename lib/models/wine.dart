@@ -3,6 +3,7 @@ class Wine {
   String name;
   double price;
   String description;
+  String? casta;
   String? imagePath;
   String? imageUrl;
   String region;
@@ -22,6 +23,7 @@ class Wine {
     required this.name,
     required this.price,
     required this.description,
+    this.casta,
     this.imagePath,
     this.imageUrl,
     this.region = 'Outra região',
@@ -43,6 +45,7 @@ class Wine {
       'name': name,
       'price': price,
       'description': description,
+      'casta': casta,
       'image_path': imagePath,
       'image_url': imageUrl,
       'region': region,
@@ -65,6 +68,7 @@ class Wine {
       name: map['name'] as String,
       price: (map['price'] as num).toDouble(),
       description: map['description'] as String,
+      casta: map['casta'] as String?,
       imagePath: map['image_path'] as String?,
       imageUrl: map['image_url'] as String?,
       region: map['region'] as String? ?? 'Outra região',
@@ -92,6 +96,7 @@ class Wine {
       'name': name,
       'price': price,
       'description': description,
+      'casta': casta,
       'imagePath': imagePath,
       'imageUrl': imageUrl,
       'location': location,
@@ -113,7 +118,9 @@ class Wine {
       name: data['name'] as String,
       price: (data['price'] as num).toDouble(),
       description: data['description'] as String,
-      imagePath: data['imagePath'] as String?,
+      casta: data['casta'] as String?,
+      // Compatibilidade com documentos antigos (snake_case)
+      imagePath: data['imagePath'] as String? ?? data['image_path'] as String?,
       imageUrl: data['imageUrl'] as String? ?? data['image_url'] as String?,
       location: data['location'] as String?,
       region: data['region'] as String? ?? 'Outra região',
@@ -139,6 +146,7 @@ class Wine {
     'name': name,
     'price': price,
     'description': description,
+    'casta': casta,
     'imagePath': imagePath,
     'imageUrl': imageUrl,
     'location': location,
@@ -155,6 +163,7 @@ class Wine {
     name: json['name'],
     price: json['price'],
     description: json['description'],
+    casta: json['casta'],
     imagePath: json['imagePath'],
     imageUrl: json['imageUrl'],
     location: json['location'],

@@ -45,6 +45,21 @@ class ResponsiveWineImage extends StatelessWidget {
                       imageUrl!,
                       fit: BoxFit.contain,
                       errorBuilder: (context, error, stackTrace) {
+                        if (hasLocal) {
+                          return Image.file(
+                            File(imagePath!),
+                            fit: BoxFit.contain,
+                            errorBuilder: (context, error, stackTrace) {
+                              return const Center(
+                                child: Icon(
+                                  Icons.wine_bar,
+                                  size: 100,
+                                  color: Colors.white70,
+                                ),
+                              );
+                            },
+                          );
+                        }
                         return const Center(
                           child: Icon(
                             Icons.wine_bar,
@@ -90,7 +105,16 @@ class ResponsiveWineImage extends StatelessWidget {
         ? Image.network(
             imageUrl!,
             fit: fit,
-            errorBuilder: (context, error, stackTrace) => placeholder,
+            errorBuilder: (context, error, stackTrace) {
+              if (hasLocal) {
+                return Image.file(
+                  File(imagePath!),
+                  fit: fit,
+                  errorBuilder: (context, error, stackTrace) => placeholder,
+                );
+              }
+              return placeholder;
+            },
           )
         : hasLocal
             ? Image.file(
